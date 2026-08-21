@@ -33,9 +33,8 @@
 BioSerpent runs completely client-side in any modern web browser with zero external dependencies or build steps required.
 
 ### 1. Run Locally
-Open index.html directly in your browser or run a simple local web server:
+Open index.html directly in your browser or run a simple local web server.
 
-\\\ash
 # Using Python
 python -m http.server 8080
 
