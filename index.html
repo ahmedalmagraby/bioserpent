@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1410">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
+<title>BioSerpent — Biomimetic Organic Snake</title>
+<link rel="stylesheet" href="css/main.css?v=6">
+<link rel="stylesheet" href="css/animations.css?v=6">
+</head>
+<body>
+<div id="app">
+  <header id="hud" class="hidden">
+    <div class="hud-chip">
+      <span class="hud-label">Score</span>
+      <span id="hudScore" class="hud-value">0</span>
+    </div>
+    <div id="hudCenter">
+      <div id="hudStats"></div>
+      <div id="hudCombo" class="hidden"></div>
+      <div id="hudBar" class="hidden"><i></i></div>
+    </div>
+    <div class="hud-chip right">
+      <span class="hud-label">Best</span>
+      <span id="hudBest" class="hud-value">0</span>
+    </div>
+    <button id="btnPause" class="icon-btn" aria-label="Pause">❚❚</button>
+  </header>
+
+  <div id="chipBar"></div>
+
+  <main id="stage">
+    <canvas id="game"></canvas>
+    <div id="dpad" class="hidden">
+      <button class="dp-btn dp-up" data-dir="up">▲</button>
+      <button class="dp-btn dp-left" data-dir="left">◀</button>
+      <button class="dp-btn dp-burst" id="dpBurst">⚡</button>
+      <button class="dp-btn dp-right" data-dir="right">▶</button>
+      <button class="dp-btn dp-down" data-dir="down">▼</button>
+    </div>
+    <div id="joyBase" class="hidden"><div id="joyStick"></div></div>
+    <div id="ripple" class="hidden"></div>
+  </main>
+
+  <section id="screen-menu" class="screen">
+    <h1 class="title">Bio<span>Serpent</span></h1>
+    <p class="tagline">a biomimetic organic snake garden</p>
+    <nav class="menu-buttons">
+      <button id="btnClassic" class="btn primary">🐍 Classic Run</button>
+      <button id="btnLevels" class="btn">🌿 Level Garden</button>
+      <button id="btnTimeAttack" class="btn">⏱ Time Attack</button>
+      <button id="btnZen" class="btn">🪷 Zen Flow</button>
+      <div class="menu-row">
+        <button id="btnSkins" class="btn small">🎨 Skins</button>
+        <button id="btnBadges" class="btn small">🏅 Badges</button>
+        <button id="btnSettings" class="btn small">⚙️ Settings</button>
+      </div>
+    </nav>
+    <div id="menuStats" class="menu-stats glass"></div>
+  </section>
+
+  <section id="screen-levels" class="screen hidden">
+    <h2 class="screen-title">Level Garden</h2>
+    <p class="screen-sub">Four biomes · twelve handcrafted challenges</p>
+    <div id="levelGrid" class="card-grid"></div>
+    <button class="btn small back-btn" data-back="menu">← Back</button>
+  </section>
+
+  <section id="screen-skins" class="screen hidden">
+    <h2 class="screen-title">Skin Locker</h2>
+    <p class="screen-sub">Unlock species by playing</p>
+    <div id="skinGrid" class="card-grid skins"></div>
+    <button class="btn small back-btn" data-back="menu">← Back</button>
+  </section>
+
+  <section id="screen-badges" class="screen hidden">
+    <h2 class="screen-title">Badges</h2>
+    <p class="screen-sub">Feats of serpentine skill</p>
+    <div id="badgeGrid" class="card-grid"></div>
+    <button class="btn small back-btn" data-back="menu">← Back</button>
+  </section>
+
+  <section id="screen-pause" class="screen overlay hidden">
+    <div class="panel glass pop-in">
+      <h2>Paused</h2>
+      <div id="pauseStats" class="pause-stats"></div>
+      <div class="stack">
+        <button id="btnResume" class="btn primary">▶ Resume</button>
+        <button id="btnPauseRestart" class="btn">↻ Restart</button>
+        <button id="btnPauseSettings" class="btn">⚙ Settings</button>
+        <button id="btnPauseQuit" class="btn danger">✕ Quit to Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-over" class="screen overlay hidden">
+    <div class="panel glass pop-in">
+      <h2 id="overTitle">Game Over</h2>
+      <div id="overStats" class="over-stats"></div>
+      <div class="stack row">
+        <button id="btnOverRestart" class="btn primary">↻ Play Again</button>
+        <button id="btnOverMenu" class="btn">☰ Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-complete" class="screen overlay hidden">
+    <div class="panel glass pop-in">
+      <h2>Level Complete!</h2>
+      <div id="starsBox" class="stars-box"></div>
+      <div id="completeScore" class="complete-score"></div>
+      <div class="stack row">
+        <button id="btnNext" class="btn primary">Next Level →</button>
+        <button id="btnReplay" class="btn">↻ Replay</button>
+        <button id="btnCompleteMenu" class="btn">☰ Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="modal-settings" class="modal hidden">
+    <div class="panel glass pop-in">
+      <h2>Settings</h2>
+      <label class="setting-row">
+        <span>🎵 Music</span>
+        <input type="range" id="setMusic" min="0" max="100" value="70">
+      </label>
+      <label class="setting-row">
+        <span>🔊 Sound FX</span>
+        <input type="range" id="setSfx" min="0" max="100" value="90">
+      </label>
+      <label class="setting-row check">
+        <input type="checkbox" id="setMute">
+        <span>🔇 Mute everything</span>
+      </label>
+      <label class="setting-row">
+        <span>📱 Touch controls</span>
+        <select id="setTouch">
+          <option value="auto">Auto</option>
+          <option value="swipe">Swipe gestures</option>
+          <option value="joystick">Floating joystick</option>
+          <option value="dpad">On-screen D-pad</option>
+          <option value="keys">Keyboard only</option>
+        </select>
+      </label>
+      <label class="setting-row">
+        <span>🧱 Walls (Classic)</span>
+        <select id="setWalls">
+          <option value="solid">Solid — crash on walls</option>
+          <option value="wrap">Wrap — slide through edges</option>
+        </select>
+      </label>
+      <p class="hint">Desktop: Arrows / WASD move · Space pause · hold Shift for speed burst · M mute</p>
+      <div class="stack row">
+        <button id="btnResetProgress" class="btn danger small">Reset progress</button>
+        <button id="btnCloseSettings" class="btn primary small">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+</div>
+<script src="js/engine/canvas.js?v=6"></script>
+<script src="js/engine/gameLoop.js?v=6"></script>
+<script src="js/engine/inputManager.js?v=6"></script>
+<script src="js/engine/particleSystem.js?v=6"></script>
+<script src="js/audio/soundManager.js?v=6"></script>
+<script src="js/entities/snake.js?v=6"></script>
+<script src="js/entities/food.js?v=6"></script>
+<script src="js/entities/powerups.js?v=6"></script>
+<script src="js/entities/obstacles.js?v=6"></script>
+<script src="js/levels/levelData.js?v=6"></script>
+<script src="js/ui/uiManager.js?v=6"></script>
+<script src="js/main.js?v=6"></script>
+<script>
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('__booterr');
+  if (!d) {
+    d = document.createElement('div');
+    d.id = '__booterr';
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#7f1020;color:#ffd9dd;font:13px monospace;padding:10px 14px;white-space:pre-wrap;';
+    document.body.appendChild(d);
+  }
+  d.textContent += '⚠ Game script error: ' + e.message + '  (' + (e.filename || '?').split('/').pop() + ':' + e.lineno + ')\n';
+});
+</script>
+</body>
+</html>
