@@ -362,6 +362,7 @@ class UIManager {
 
   setDpadVisible(v) {
     this.el.dpad.classList.toggle('hidden', !v);
+    document.body.classList.toggle('dpad-open', !!v);
   }
 
   setStats(list) {

@@ -97,8 +97,9 @@ class View {
 
   resize() {
     const r = this.stage.getBoundingClientRect();
-    const availW = Math.max(120, r.width - 12);
-    const availH = Math.max(120, r.height - 12);
+    const cs = getComputedStyle(this.stage);
+    const availW = Math.max(120, r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    const availH = Math.max(120, r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
     this.cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / ROWS)));
     this.w = this.cell * COLS;
     this.h = this.cell * ROWS;
