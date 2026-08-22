@@ -1,9 +1,29 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { rand, randi, pick, TAU } = BS;
+const { rand, randi, pick, TAU, REDUCED_MOTION } = BS;
 
-"use strict";
+const _spriteCache = new Map();
+function dotSprite(color) {
+  let cv = _spriteCache.get(color);
+  if (cv) return cv;
+  const r = 32;
+  cv = document.createElement('canvas');
+  cv.width = r * 2;
+  cv.height = r * 2;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(r, r, 0, r, r, r);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, r * 2, r * 2);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = color;
+  c.fillRect(0, 0, r * 2, r * 2);
+  _spriteCache.set(color, cv);
+  return cv;
+}
 
 class Particles {
   constructor() {
@@ -29,6 +49,7 @@ class Particles {
   }
 
   shake(m) {
+    if (REDUCED_MOTION) m *= 0.35;
     this.shakeMag = Math.max(this.shakeMag, m);
   }
 
@@ -69,7 +90,8 @@ class Particles {
   ambient(key, w, h, dt) {
     if (!key) return;
     this._ambAcc += dt;
-    const interval = key === 'cavern' ? 260 : 340;
+    let interval = key === 'cavern' ? 260 : 340;
+    if (REDUCED_MOTION) interval *= 3;
     while (this._ambAcc > interval) {
       this._ambAcc -= interval;
       if (this.list.length > 380) break;
@@ -139,13 +161,8 @@ class Particles {
       ctx.save();
       ctx.globalAlpha = a;
       if (p.type === 'glow' || p.type === 'spark') {
-        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3);
-        g.addColorStop(0, p.color);
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 3, 0, TAU);
-        ctx.fill();
+        const r = p.size * 3;
+        ctx.drawImage(dotSprite(p.color), p.x - r, p.y - r, r * 2, r * 2);
       } else if (p.type === 'leaf') {
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);

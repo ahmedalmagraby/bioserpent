@@ -3,8 +3,6 @@ window.BS = window.BS || {};
 "use strict";
 const { clamp, lerp, rand, TAU, lerpColor } = BS;
 
-"use strict";
-
 const SKINS = [
   {
     id: 'emerald', name: 'Emerald Python',
@@ -39,6 +37,20 @@ const SKINS = [
     pattern: '#f2c7ee', eye: '#b388ff', pupil: '#2a1440', tongue: '#ff8ab5',
     banded: false, trail: 'sparkle',
     unlock: { type: 'stars', value: 18 }, hint: 'Earn 18 stars'
+  },
+  {
+    id: 'aurora', name: 'Cosmic Aurora',
+    c1: '#a855f7', c2: '#06b6d4', belly: '#e0e7ff', outline: '#1e1b4b',
+    pattern: '#f472b6', eye: '#38bdf8', pupil: '#0f172a', tongue: '#f43f5e',
+    banded: true, trail: 'glow',
+    unlock: { type: 'stars', value: 25 }, hint: 'Earn 25 stars'
+  },
+  {
+    id: 'crimson', name: 'Crimson Dragon',
+    c1: '#ef4444', c2: '#7f1d1d', belly: '#fef08a', outline: '#450a0a',
+    pattern: '#f97316', eye: '#fbbf24', pupil: '#18181b', tongue: '#dc2626',
+    banded: false, trail: 'sparkle',
+    unlock: { type: 'classicBest', value: 350 }, hint: 'Score 350+ in Classic'
   }
 ];
 
@@ -276,7 +288,11 @@ class Snake {
     const alpha = baseA * (state.ghost ? 0.66 + 0.08 * Math.sin(time * 0.008) : 1);
     const cell = view.cell;
     const hp = sp.head;
-    const ang = Math.atan2(hp[0].py - hp[1].py, hp[0].px - hp[1].px);
+    const hdx = hp[0].px - hp[1].px;
+    const hdy = hp[0].py - hp[1].py;
+    const ang = (hdx !== 0 || hdy !== 0)
+      ? Math.atan2(hdy, hdx)
+      : Math.atan2(this.dir.y, this.dir.x);
     const headCopies = [];
     for (let si = 0; si < sp.all.length; si++) {
       const pts = sp.all[si];
@@ -383,15 +399,21 @@ function drawBody(ctx, pts, cell, skin, o) {
     ctx.lineWidth = w;
     segLine(ctx, pts[i], pts[i - 1]);
   }
-  ctx.globalAlpha = alpha * 0.32;
+  ctx.globalAlpha = alpha * 0.38;
   ctx.strokeStyle = skin.belly;
-  for (let i = n - 1; i > 0; i -= 4) {
+  for (let i = n - 1; i > 0; i -= 3) {
     const u = i / (n - 1);
     const w = maxW * taper(u);
-    ctx.lineWidth = w * 0.3;
+    const dx = pts[i - 1].px - pts[i].px;
+    const dy = pts[i - 1].py - pts[i].py;
+    const segLen = Math.hypot(dx, dy) || 1;
+    const nx = -dy / segLen;
+    const ny = dx / segLen;
+    const offset = w * 0.16;
+    ctx.lineWidth = Math.max(1.5, w * 0.28);
     ctx.beginPath();
-    ctx.moveTo(pts[i].px - w * 0.06, pts[i].py - w * 0.2);
-    ctx.lineTo(pts[i - 1].px - w * 0.06, pts[i - 1].py - w * 0.2);
+    ctx.moveTo(pts[i].px + nx * offset, pts[i].py + ny * offset);
+    ctx.lineTo(pts[i - 1].px + nx * offset, pts[i - 1].py + ny * offset);
     ctx.stroke();
   }
   ctx.globalAlpha = alpha;
@@ -448,6 +470,14 @@ function drawHead(ctx, x, y, ang, R, skin, o) {
       ctx.stroke();
     }
   }
+  // Rotate world gaze vector into head-relative local coordinate space
+  const cosA = Math.cos(-ang);
+  const sinA = Math.sin(-ang);
+  const rawX = o.pdx ?? 0;
+  const rawY = o.pdy ?? 0;
+  const localLookX = rawX * cosA - rawY * sinA;
+  const localLookY = rawX * sinA + rawY * cosA;
+
   for (const s of [-1, 1]) {
     const ex = R * 0.3;
     const ey = s * R * 0.5;
@@ -463,11 +493,11 @@ function drawHead(ctx, x, y, ang, R, skin, o) {
     ctx.stroke();
     ctx.fillStyle = skin.pupil;
     ctx.beginPath();
-    ctx.arc((o.pdx ?? 0) * R * 0.16, (o.pdy ?? 0) * R * 0.16, R * 0.19, 0, TAU);
+    ctx.arc(localLookX * R * 0.16, localLookY * R * 0.16, R * 0.19, 0, TAU);
     ctx.fill();
     ctx.fillStyle = skin.eye;
     ctx.beginPath();
-    ctx.arc((o.pdx ?? 0) * R * 0.16 - R * 0.06, (o.pdy ?? 0) * R * 0.16 - R * 0.08, R * 0.07, 0, TAU);
+    ctx.arc(localLookX * R * 0.16 - R * 0.06, localLookY * R * 0.16 - R * 0.08, R * 0.07, 0, TAU);
     ctx.fill();
     ctx.restore();
   }

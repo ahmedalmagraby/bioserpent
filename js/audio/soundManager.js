@@ -1,8 +1,7 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-class SoundManager {
-  constructor() {
+class SoundManager {  constructor() {
     this.ctx = null;
     this.master = null;
     this.musicBus = null;
@@ -19,13 +18,29 @@ class SoundManager {
     this._intensity = v;
   }
 
+  setSuspended(s) {
+    if (!this.ctx || this.ctx.state === (s ? 'suspended' : 'running')) return;
+    const p = s ? this.ctx.suspend() : this.ctx.resume();
+    if (p && p.catch) p.catch(() => {});
+  }
+
   unlock() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       this.ctx = new AC();
+      
+      // Dynamic compressor to prevent digital clipping & balance master output
+      this.compressor = this.ctx.createDynamicsCompressor();
+      this.compressor.threshold.setValueAtTime(-14, this.ctx.currentTime);
+      this.compressor.knee.setValueAtTime(30, this.ctx.currentTime);
+      this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
+      this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+      this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+      this.compressor.connect(this.ctx.destination);
+
       this.master = this.ctx.createGain();
-      this.master.connect(this.ctx.destination);
+      this.master.connect(this.compressor);
       this.musicBus = this.ctx.createGain();
       this.musicBus.connect(this.master);
       this.sfxBus = this.ctx.createGain();
@@ -170,6 +185,32 @@ class SoundManager {
     });
   }
 
+  dragonfly(pan) {
+    [0, 0.05, 0.1].forEach((dt, i) => {
+      this.tone({ type: 'triangle', f: 1800 + i * 400, f2: 2600, dur: 0.06, gain: 0.16, t: this.time + dt, echo: true, pan });
+    });
+    this.noise({ hp: 4500, dur: 0.12, gain: 0.08, pan });
+  }
+
+  comboChime(comboLevel, pan) {
+    const scale = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+    const idx = Math.min(Math.max(0, comboLevel - 1), scale.length - 1);
+    const f = scale[idx];
+    this.tone({ type: 'sine', f, f2: f * 1.05, dur: 0.22, gain: 0.18, echo: true, pan });
+  }
+
+  nearMiss(pan) {
+    this.noise({ bp: 800, bp2: 2200, q: 3, dur: 0.18, gain: 0.12, pan });
+  }
+
+  sliderPreview(type) {
+    if (type === 'music') {
+      this.tone({ type: 'triangle', f: 440, dur: 0.25, gain: 0.2, dest: this.musicBus });
+    } else {
+      this.tone({ type: 'sine', f: 880, dur: 0.15, gain: 0.2, dest: this.sfxBus });
+    }
+  }
+
   powerup(pan) {
     this.tone({ type: 'sawtooth', f: 220, f2: 660, dur: 0.35, gain: 0.13, lp: 400, lp2: 2600, pan });
     [523, 659, 784].forEach((f, i) => {
@@ -255,9 +296,11 @@ class SoundManager {
 
   _schedule() {
     const s = this._song;
-    if (!s || !this.ctx) return;
+    if (!s || !this.ctx || this.volumes.muted || this.ctx.state !== 'running') return;
     const cfg = s.cfg;
     const lookahead = this.time + 1.2;
+    if (s.nextBar < this.time) s.nextBar = this.time + 0.05;
+    if (s.nextPluck < this.time) s.nextPluck = this.time + 0.05;
     while (s.nextBar < lookahead) {
       const t = s.nextBar;
       const chord = cfg.chords[s.bar % cfg.chords.length];

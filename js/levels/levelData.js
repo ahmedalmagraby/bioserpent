@@ -227,7 +227,7 @@ const LEVELS = [
   },
   {
     name: 'Coral Alley', biome: 'reef', goalApples: 13, stepMs: 128,
-    insects: { beetle: 2 }, stars: [210, 290, 400],
+    insects: { beetle: 1, dragonfly: 1 }, stars: [210, 290, 400],
     blurb: 'Weave through the reef',
     map: [
       E, E,
@@ -263,7 +263,7 @@ const LEVELS = [
   },
   {
     name: 'Abyss Throne', biome: 'reef', goalApples: 16, stepMs: 118,
-    insects: { beetle: 2, firefly: 1 }, stars: [260, 360, 480],
+    insects: { beetle: 2, firefly: 1, dragonfly: 1 }, stars: [260, 360, 480],
     blurb: 'The final trial of the deep',
     map: [
       E,

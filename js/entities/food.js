@@ -1,11 +1,13 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { COLS, ROWS, TAU, rand, randi, pick, easeOutCubic } = BS;
-
-"use strict";
+const { COLS, ROWS, TAU, rand, randi, pick, easeOutCubic, CONFIG } = BS;
 
 const DIR8 = [
+  { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
+  { x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 }
+];
+const CARDINALS = [
   { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
 ];
 
@@ -28,14 +30,43 @@ class FoodManager {
   }
 
   randomFree(isFree) {
-    for (let i = 0; i < 250; i++) {
+    const m = CONFIG.spawnMargin || 0;
+    const x0 = Math.min(m, COLS - 1);
+    const x1 = Math.max(x0, COLS - 1 - m);
+    const y0 = Math.min(m, ROWS - 1);
+    const y1 = Math.max(y0, ROWS - 1 - m);
+    for (let i = 0; i < 60; i++) {
+      const x = randi(x0, x1);
+      const y = randi(y0, y1);
+      if (!isFree(x, y)) continue;
+      if (this.occupied(x, y)) continue;
+      return { x, y };
+    }
+    for (let i = 0; i < 40; i++) {
       const x = randi(0, COLS - 1);
       const y = randi(0, ROWS - 1);
       if (!isFree(x, y)) continue;
       if (this.occupied(x, y)) continue;
       return { x, y };
     }
-    return null;
+    const freeCells = [];
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        if (isFree(x, y) && !this.occupied(x, y)) {
+          freeCells.push({ x, y });
+        }
+      }
+    }
+    if (!freeCells.length) {
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (isFree(x, y) && !this.occupied(x, y)) {
+            freeCells.push({ x, y });
+          }
+        }
+      }
+    }
+    return freeCells.length ? pick(freeCells) : null;
   }
 
   spawnApple(isFree) {
@@ -47,36 +78,37 @@ class FoodManager {
     if (this.items.some(i => i.type === 'golden')) return false;
     const c = this.randomFree(isFree);
     if (!c) return false;
-    this.items.push({ type: 'golden', gx: c.x, gy: c.y, age: 0, life: 11000, maxLife: 11000, hop: 0, pop: 0 });
+    this.items.push({ type: 'golden', gx: c.x, gy: c.y, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
     return true;
   }
 
   spawnInsect(kind, isFree) {
     const c = this.randomFree(isFree);
     if (!c) return;
+    const dur = kind === 'dragonfly' ? 240 : kind === 'beetle' ? 320 : 460;
     this.insects.push({
       kind,
       fx: c.x, fy: c.y, tx: c.x, ty: c.y,
       prog: 1,
-      dur: kind === 'beetle' ? 320 : 460,
-      dir: pick(DIR8),
+      dur,
+      dir: pick(kind === 'dragonfly' ? DIR8 : CARDINALS),
       age: rand(0, 2000),
       wing: rand(0, TAU),
       pop: 0
     });
   }
 
-  magnetPull(head, isFree) {
+  magnetPull(head, canLand) {
     for (const it of this.items) {
       const dx = head.x - it.gx;
       const dy = head.y - it.gy;
       const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist > 5 || dist === 0) continue;
+      if (dist > 6 || dist === 0) continue;
       let nx = it.gx;
       let ny = it.gy;
       if (Math.abs(dx) >= Math.abs(dy)) nx += Math.sign(dx);
       else ny += Math.sign(dy);
-      if (isFree(nx, ny) && !this.occupied(nx, ny)) {
+      if (canLand(nx, ny) && !this.occupied(nx, ny)) {
         it.gx = nx;
         it.gy = ny;
         it.hop = 1;
@@ -104,7 +136,7 @@ class FoodManager {
     }
     for (const n of this.insects) {
       n.age += dt;
-      n.wing += dt * (n.kind === 'firefly' ? 0.05 : 0.02);
+      n.wing += dt * (n.kind === 'dragonfly' ? 0.08 : n.kind === 'firefly' ? 0.05 : 0.02);
       if (n.pop !== undefined && n.pop < 1) n.pop = Math.min(1, n.pop + dt / 220);
       if (n.prog < 1) {
         n.prog = Math.min(1, n.prog + dt / n.dur);
@@ -115,11 +147,13 @@ class FoodManager {
       let chosen = null;
       let bestScore = -Infinity;
       const fleeing = !!env.head &&
-        Math.abs(env.head.x - n.fx) + Math.abs(env.head.y - n.fy) <= 4;
+        Math.abs(env.head.x - n.fx) + Math.abs(env.head.y - n.fy) <= (n.kind === 'dragonfly' ? 5 : 4);
       const cands = [];
-      if (Math.random() < (fleeing ? 0.85 : n.kind === 'beetle' ? 0.65 : 0.3)) cands.push(n.dir);
-      while (cands.length < 4) {
-        const d = pick(DIR8);
+      const dirPool = n.kind === 'dragonfly' ? DIR8 : CARDINALS;
+      if (Math.random() < (fleeing ? 0.9 : n.kind === 'dragonfly' ? 0.75 : n.kind === 'beetle' ? 0.65 : 0.3)) cands.push(n.dir);
+      // Safely add remaining directions without infinite while loops
+      const shuffled = [...dirPool].sort(() => Math.random() - 0.5);
+      for (const d of shuffled) {
         if (!cands.some(t => t.x === d.x && t.y === d.y)) cands.push(d);
       }
       for (const d of cands) {
@@ -144,8 +178,9 @@ class FoodManager {
         n.tx = n.fx + chosen.x;
         n.ty = n.fy + chosen.y;
         n.prog = 0;
-        if (fleeing) n.dur = (n.kind === 'beetle' ? 320 : 460) * (n.kind === 'beetle' ? 0.55 : 0.8);
-        else n.dur = n.kind === 'beetle' ? 320 : 460;
+        const baseDur = n.kind === 'dragonfly' ? 240 : n.kind === 'beetle' ? 320 : 460;
+        if (fleeing) n.dur = baseDur * (n.kind === 'dragonfly' ? 0.5 : n.kind === 'beetle' ? 0.55 : 0.8);
+        else n.dur = baseDur;
       }
     }
   }
@@ -252,7 +287,7 @@ class FoodManager {
         ctx.beginPath();
         ctx.arc(x, y, cell * 0.9 * pulse, 0, TAU);
         ctx.fill();
-        const frac = Math.max(0, it.life / (it.maxLife || 11000));
+        const frac = Math.max(0, it.life / (it.maxLife || CONFIG.goldenLifeMs));
         ctx.strokeStyle = frac < 0.35 ? '#ff6b6b' : '#ffd54a';
         ctx.lineWidth = cell * 0.06;
         ctx.lineCap = 'round';
@@ -317,6 +352,53 @@ class FoodManager {
         ctx.beginPath();
         ctx.ellipse(cell * 0.08, 0, cell * 0.14, cell * 0.1, 0, 0, TAU);
         ctx.fill();
+      } else if (n.kind === 'dragonfly') {
+        const ang = Math.atan2(n.ty - n.fy, n.tx - n.fx);
+        if (!(n.tx === n.fx && n.ty === n.fy)) ctx.rotate(ang);
+        const flap = Math.sin(n.wing * 1.6) * 0.45;
+        // 4 wings (2 on each side)
+        ctx.fillStyle = 'rgba(140, 230, 255, 0.6)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = cell * 0.02;
+        for (const s of [-1, 1]) {
+          // Front wing
+          ctx.save();
+          ctx.rotate(s * (1.1 + flap * s));
+          ctx.beginPath();
+          ctx.ellipse(0, s * cell * 0.22, cell * 0.07, cell * 0.26, s * 0.2, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+          // Back wing
+          ctx.save();
+          ctx.rotate(s * (1.5 - flap * s * 0.8));
+          ctx.beginPath();
+          ctx.ellipse(-cell * 0.06, s * cell * 0.18, cell * 0.06, cell * 0.22, -s * 0.2, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Long slender iridescent body
+        const grad = ctx.createLinearGradient(-cell * 0.3, 0, cell * 0.25, 0);
+        grad.addColorStop(0, '#00b4d8');
+        grad.addColorStop(0.5, '#48cae4');
+        grad.addColorStop(1, '#90e0ef');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(-cell * 0.08, 0, cell * 0.28, cell * 0.05, 0, 0, TAU);
+        ctx.fill();
+        // Thorax & Head
+        ctx.fillStyle = '#023e8a';
+        ctx.beginPath();
+        ctx.arc(cell * 0.14, 0, cell * 0.07, 0, TAU);
+        ctx.fill();
+        // Compound big glowing eyes
+        ctx.fillStyle = '#00f5d4';
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.arc(cell * 0.18, s * cell * 0.05, cell * 0.04, 0, TAU);
+          ctx.fill();
+        }
       } else {
         const ang = Math.atan2(n.ty - n.fy, n.tx - n.fx);
         if (!(n.tx === n.fx && n.ty === n.fy)) ctx.rotate(ang);

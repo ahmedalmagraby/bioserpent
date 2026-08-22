@@ -56,3 +56,16 @@
   to { opacity: 0; transform: scale(1.6); }
 }
 #ripple.show { animation: rippleOut 0.45s ease forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .title,
+  .btn.primary,
+  #hudCombo.pulse,
+  .pop-in,
+  .toast,
+  .screen,
+  .chip,
+  .stars-box .star.on {
+    animation: none !important;
+  }
+}

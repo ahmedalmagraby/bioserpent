@@ -1,9 +1,7 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { COLS, ROWS, TAU, rand, randi, pick } = BS;
-
-"use strict";
+const { COLS, ROWS, TAU, rand, randi, pick, CONFIG } = BS;
 
 const POWERUP_META = {
   magnet: { label: 'Magnet Spore', short: 'M', color: '#69b7ff', cap: '#3f7fd0', spot: '#bcdcff', dur: 9000 },
@@ -24,15 +22,49 @@ class PowerUpManager {
     this.field.length = 0;
   }
 
+  occupied(x, y) {
+    return this.field.some(p => p.gx === x && p.gy === y);
+  }
+
   spawn(isFree, forceType) {
     if (this.field.length >= 2) return;
-    for (let i = 0; i < 200; i++) {
+    const m = CONFIG.spawnMargin || 0;
+    const x0 = Math.min(m, COLS - 1);
+    const x1 = Math.max(x0, COLS - 1 - m);
+    const y0 = Math.min(m, ROWS - 1);
+    const y1 = Math.max(y0, ROWS - 1 - m);
+    for (let i = 0; i < 50; i++) {
+      const x = randi(x0, x1);
+      const y = randi(y0, y1);
+      if (!isFree(x, y)) continue;
+      if (this.occupied(x, y)) continue;
+      this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      return;
+    }
+    for (let i = 0; i < 30; i++) {
       const x = randi(0, COLS - 1);
       const y = randi(0, ROWS - 1);
       if (!isFree(x, y)) continue;
-      if (this.field.some(p => p.gx === x && p.gy === y)) continue;
-      this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: 12000 });
+      if (this.occupied(x, y)) continue;
+      this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
       return;
+    }
+    const freeCells = [];
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        if (isFree(x, y) && !this.occupied(x, y)) freeCells.push({ x, y });
+      }
+    }
+    if (!freeCells.length) {
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (isFree(x, y) && !this.occupied(x, y)) freeCells.push({ x, y });
+        }
+      }
+    }
+    if (freeCells.length) {
+      const c = pick(freeCells);
+      this.field.push({ type: forceType ?? pick(TYPES), gx: c.x, gy: c.y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
     }
   }
 

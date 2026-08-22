@@ -8,23 +8,33 @@
 
 - **Fluid Biomimetic Motion**: Smooth procedural spine inverse-kinematics and organic curves instead of rigid grid blocks.
 - **Multiple Game Modes**:
-  - 🐍 **Classic Run**: Progressive difficulty, speed curves, and high score tracking.
-  - ⏳ **Time Attack**: Fast-paced score sprint under a strict timer.
-  - 🌿 **Zen Mode**: Relaxing, peaceful garden wandering with no wall death.
-  - 🗺️ **Campaign Levels**: 10 hand-crafted obstacle courses with 3-star scoring benchmarks.
+  - 🐍 **Classic Run**: Progressive speed curves, biome transitions, combo multipliers, and high score tracking.
+  - ⏳ **Time Attack**: Fast-paced score sprint under a strict timer with combo time extensions.
+  - 🪷 **Zen Flow**: Relaxing, peaceful garden wandering with tail ghosting and wall wrap.
+  - 🗺️ **Campaign Garden**: 12 hand-crafted obstacle courses across 4 biomes with 3-star scoring benchmarks.
 - **Organic Ecosystem & Prey**:
-  - Apples, Golden Berries, Chasing Beetles, Fireflies, Dragonflies, and more.
+  - Red Apples, Golden Berries, Chasing Beetles, Bioluminescent Fireflies, and Evasive Dragonflies.
 - **Dynamic Power-ups**:
-  - Speed Boosts, Time Dilation / Slomo, Magnetism, Ghost (Phasing), and Multipliers.
+  - Magnet Spores, Slow-Mo Amber, Ghost Phase, 2× Multipliers, and Prune Shrooms.
 - **Rich Visuals & Biomes**:
-  - Lush Garden, Volcanic Basin, Bioluminescent Deep, Ancient Ruins, and Cosmic Void.
-  - Unlockable serpent skins (Emerald, Obsidian, Coral, Aurora, etc.).
-- **Synthetic Procedural Audio**:
-  - Web Audio API synthesizer for responsive, real-time sound effects and ambient chimes with no external audio asset dependencies.
-- **Responsive Controls**:
-  - Keyboard (Arrows, WASD, Space for burst)
-  - Virtual D-Pad / Touch Joystick on mobile
-  - Swipe gestures
+  - Emerald Rainforest, Golden Oasis, Bioluminescent Cavern, and Abyssal Reef.
+  - 7 Unlockable serpent species (Emerald Python, Coral Serpent, Golden Sun Dragon, Abyssal Biolume, Albino Royal, Cosmic Aurora, Crimson Dragon).
+- **Synthetic Procedural Audio & Dynamics Limiter**:
+  - Web Audio API synthesizer with Dynamics Compressor peak limiting, multi-voice chords, combo chime arpeggios, and ambient soundscapes.
+- **In-Game Field Guide**:
+  - Comprehensive bestiary detailing prey behaviors, power-up effects, biome hazards, and controls.
+
+---
+
+## 🎮 Controls
+
+| Action | Keyboard | Touch / Mobile |
+|---|---|---|
+| **Steer** | Arrow Keys / `W`, `A`, `S`, `D` | Swipe / Floating Joystick / On-screen D-Pad |
+| **Speed Burst** | Hold `Shift` | Hold Burst Button (`⚡`) / Second Finger |
+| **Pause / Resume** | `Space` / `P` / `Escape` | HUD Pause Button (`❚❚`) |
+| **Quick Restart** | `R` (on game over / pause) | Restart Button (`↻`) |
+| **Toggle Mute** | `M` | Settings Modal Toggle |
 
 ---
 
@@ -33,35 +43,30 @@
 BioSerpent runs completely client-side in any modern web browser with zero external dependencies or build steps required.
 
 ### 1. Run Locally
-Open index.html directly in your browser or run a simple local web server.
+Open index.html directly in your browser or run a simple local web server:
 
+```bash
 # Using Python
 python -m http.server 8080
 
 # Using Node.js (npx)
 npx serve .
-\\\
+```
 
-Then navigate to \http://localhost:8080\ in your web browser.
-
----
-
-## 🎮 Controls
-
-| Action | Keyboard | Touch / Mobile |
-|---|---|---|
-| **Move** | Arrow Keys / \W\, \A\, \S\, \D\ | Swipe / Virtual Joystick / D-Pad |
-| **Speed Burst** | \Space\ / \Shift\ | Burst Button (⚡) |
-| **Pause** | \Escape\ / \P\ | HUD Pause Button (❚❚) |
+Then navigate to `http://localhost:8080` in your web browser.
 
 ---
 
 ## 🛠️ Tech Stack
 
 - **HTML5 Canvas** (2D Context Rendering)
-- **Vanilla JavaScript** (ES6+ Modules & OOP Architecture)
+- **Vanilla JavaScript** (ES6+, OOP classes namespaced under a single `window.BS` global — classic `<script>` includes, no bundler or build step)
 - **Web Audio API** (Procedural sound effects and synthesis)
 - **CSS3** (Animations & Responsive Layouts)
+
+### Editing files
+
+There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=8`) so browsers pick up the new version.
 
 ---
 

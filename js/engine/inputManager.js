@@ -3,8 +3,6 @@ window.BS = window.BS || {};
 "use strict";
 const { clamp } = BS;
 
-"use strict";
-
 const DIRS = {
   up: { x: 0, y: -1 },
   down: { x: 0, y: 1 },
@@ -79,17 +77,6 @@ class InputManager {
   }
 
   onKeyDown(e) {
-    const dir = KEY_DIR[e.code];
-    if (dir) {
-      if (!e.repeat) this.h.onDir(dir);
-      e.preventDefault();
-      return;
-    }
-    if (e.code === 'Space' || e.code === 'KeyP') {
-      if (!e.repeat) this.h.onPause();
-      e.preventDefault();
-      return;
-    }
     if (e.code === 'Escape') {
       if (!e.repeat) this.h.onEscape();
       e.preventDefault();
@@ -101,6 +88,19 @@ class InputManager {
     }
     if (e.code === 'KeyR') {
       if (!e.repeat && this.h.onRestartKey) this.h.onRestartKey();
+      return;
+    }
+    const t = e.target;
+    if (t && t.closest && t.closest('input, select, textarea, button, a')) return;
+    const dir = KEY_DIR[e.code];
+    if (dir) {
+      if (!e.repeat) this.h.onDir(dir);
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'Space' || e.code === 'KeyP') {
+      if (!e.repeat) this.h.onPause();
+      e.preventDefault();
       return;
     }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
@@ -141,6 +141,10 @@ class InputManager {
     } else if (this._burstId === null && e.pointerId !== this._joyId) {
       this._burstId = e.pointerId;
       this.h.onBurst(true);
+      if (!this._burstHintShown) {
+        this._burstHintShown = true;
+        if (this.h.onBurstHint) this.h.onBurstHint();
+      }
     }
   }
 
@@ -197,21 +201,44 @@ class InputManager {
   }
 
   bindDPad(container) {
-    container.querySelectorAll('.dp-btn[data-dir]').forEach(btn => {
-      btn.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        this.h.onDir(btn.dataset.dir);
-      });
-    });
-    const burstBtn = document.getElementById('dpBurst');
-    burstBtn.addEventListener('pointerdown', e => {
+    this._dpActiveId = null;
+    this._dpLastDir = null;
+    this._dpBurstGesture = false;
+    container.addEventListener('pointerdown', e => {
+      const btn = e.target.closest('.dp-btn');
+      if (!btn) return;
       e.preventDefault();
-      this.h.onBurst(true);
+      this._dpActiveId = e.pointerId;
+      this._dpBurstGesture = !btn.dataset.dir;
+      try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (this._dpBurstGesture) {
+        this.h.onBurst(true);
+      } else {
+        this._dpLastDir = btn.dataset.dir;
+        this.h.onDir(btn.dataset.dir);
+      }
     });
-    const end = () => this.h.onBurst(false);
-    burstBtn.addEventListener('pointerup', end);
-    burstBtn.addEventListener('pointercancel', end);
-    burstBtn.addEventListener('pointerleave', end);
+    container.addEventListener('pointermove', e => {
+      if (e.pointerId !== this._dpActiveId || this._dpBurstGesture || this._dpLastDir === null) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const btn = el && el.closest ? el.closest('.dp-btn[data-dir]') : null;
+      const dir = btn ? btn.dataset.dir : null;
+      if (dir && dir !== this._dpLastDir) {
+        this._dpLastDir = dir;
+        this.h.onDir(dir);
+      }
+    });
+    const release = e => {
+      if (e.pointerId !== this._dpActiveId) return;
+      this._dpActiveId = null;
+      this._dpLastDir = null;
+      if (this._dpBurstGesture) {
+        this._dpBurstGesture = false;
+        this.h.onBurst(false);
+      }
+    };
+    container.addEventListener('pointerup', release);
+    container.addEventListener('pointercancel', release);
   }
 }
 

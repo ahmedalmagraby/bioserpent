@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b1410">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=6">
-<link rel="stylesheet" href="css/animations.css?v=6">
+<link rel="stylesheet" href="css/main.css?v=8">
+<link rel="stylesheet" href="css/animations.css?v=8">
 </head>
 <body>
 <div id="app">
@@ -31,13 +31,13 @@
   <div id="chipBar"></div>
 
   <main id="stage">
-    <canvas id="game"></canvas>
+    <canvas id="game" role="img" aria-label="BioSerpent game board"></canvas>
     <div id="dpad" class="hidden">
-      <button class="dp-btn dp-up" data-dir="up">▲</button>
-      <button class="dp-btn dp-left" data-dir="left">◀</button>
-      <button class="dp-btn dp-burst" id="dpBurst">⚡</button>
-      <button class="dp-btn dp-right" data-dir="right">▶</button>
-      <button class="dp-btn dp-down" data-dir="down">▼</button>
+      <button class="dp-btn dp-up" data-dir="up" aria-label="Steer up">▲</button>
+      <button class="dp-btn dp-left" data-dir="left" aria-label="Steer left">◀</button>
+      <button class="dp-btn dp-burst" id="dpBurst" aria-label="Speed burst">⚡</button>
+      <button class="dp-btn dp-right" data-dir="right" aria-label="Steer right">▶</button>
+      <button class="dp-btn dp-down" data-dir="down" aria-label="Steer down">▼</button>
     </div>
     <div id="joyBase" class="hidden"><div id="joyStick"></div></div>
     <div id="ripple" class="hidden"></div>
@@ -54,6 +54,7 @@
       <div class="menu-row">
         <button id="btnSkins" class="btn small">🎨 Skins</button>
         <button id="btnBadges" class="btn small">🏅 Badges</button>
+        <button id="btnGuide" class="btn small">📖 Guide</button>
         <button id="btnSettings" class="btn small">⚙️ Settings</button>
       </div>
     </nav>
@@ -118,6 +119,22 @@
     </div>
   </section>
 
+  <div id="modal-guide" class="modal hidden">
+    <div class="panel glass pop-in guide-panel">
+      <h2>📖 Serpent Field Guide</h2>
+      <div class="guide-tabs">
+        <button class="guide-tab active" data-tab="prey">🍎 Prey</button>
+        <button class="guide-tab" data-tab="powers">🍄 Power-ups</button>
+        <button class="guide-tab" data-tab="hazards">🌍 Biomes</button>
+        <button class="guide-tab" data-tab="tips">🎮 Controls</button>
+      </div>
+      <div id="guideContent" class="guide-content">
+        <!-- populated dynamically or statically -->
+      </div>
+      <button id="btnCloseGuide" class="btn primary small">Got it</button>
+    </div>
+  </div>
+
   <div id="modal-settings" class="modal hidden">
     <div class="panel glass pop-in">
       <h2>Settings</h2>
@@ -150,7 +167,11 @@
           <option value="wrap">Wrap — slide through edges</option>
         </select>
       </label>
-      <p class="hint">Desktop: Arrows / WASD move · Space pause · hold Shift for speed burst · M mute</p>
+      <p class="hint">Desktop: Arrows / WASD steer · hold Shift for speed burst · Space pauses · M mute</p>
+      <div class="stack row">
+        <button id="btnExportSave" class="btn small">⬆ Export save</button>
+        <button id="btnImportSave" class="btn small">⬇ Import save</button>
+      </div>
       <div class="stack row">
         <button id="btnResetProgress" class="btn danger small">Reset progress</button>
         <button id="btnCloseSettings" class="btn primary small">Done</button>
@@ -158,20 +179,20 @@
     </div>
   </div>
 
-  <div id="toasts"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=6"></script>
-<script src="js/engine/gameLoop.js?v=6"></script>
-<script src="js/engine/inputManager.js?v=6"></script>
-<script src="js/engine/particleSystem.js?v=6"></script>
-<script src="js/audio/soundManager.js?v=6"></script>
-<script src="js/entities/snake.js?v=6"></script>
-<script src="js/entities/food.js?v=6"></script>
-<script src="js/entities/powerups.js?v=6"></script>
-<script src="js/entities/obstacles.js?v=6"></script>
-<script src="js/levels/levelData.js?v=6"></script>
-<script src="js/ui/uiManager.js?v=6"></script>
-<script src="js/main.js?v=6"></script>
+<script src="js/engine/canvas.js?v=8"></script>
+<script src="js/engine/gameLoop.js?v=8"></script>
+<script src="js/engine/inputManager.js?v=8"></script>
+<script src="js/engine/particleSystem.js?v=8"></script>
+<script src="js/audio/soundManager.js?v=8"></script>
+<script src="js/entities/snake.js?v=8"></script>
+<script src="js/entities/food.js?v=8"></script>
+<script src="js/entities/powerups.js?v=8"></script>
+<script src="js/entities/obstacles.js?v=8"></script>
+<script src="js/levels/levelData.js?v=8"></script>
+<script src="js/ui/uiManager.js?v=8"></script>
+<script src="js/main.js?v=8"></script>
 <script>
 window.addEventListener('error', function (e) {
   var d = document.getElementById('__booterr');

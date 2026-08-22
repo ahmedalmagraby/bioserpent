@@ -1,9 +1,7 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { View, COLS, ROWS, clamp, rand, randi, TAU, mulberry32, GameLoop, InputManager, DIRS, Particles, SoundManager, Snake, SKINS, FoodManager, PowerUpManager, POWERUP_META, Obstacles, LEVELS, BIOMES, UIManager } = BS;
-
-"use strict";
+const { View, COLS, ROWS, clamp, rand, randi, TAU, mulberry32, GameLoop, InputManager, DIRS, Particles, SoundManager, Snake, SKINS, FoodManager, PowerUpManager, POWERUP_META, Obstacles, LEVELS, BIOMES, UIManager, CONFIG } = BS;
 
 const SAVE_KEY = 'bioSerpentSave_v1';
 
@@ -15,30 +13,37 @@ function defaultSave() {
     settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid' },
     skin: 'emerald',
     seenHint: false,
-    stats: { apples: 0, golden: 0, insects: 0, powerups: 0, games: 0, maxLength: 0, topspeed: false, pacifist: false },
+    stats: { apples: 0, golden: 0, insects: 0, dragonflies: 0, powerups: 0, games: 0, maxLength: 0, topspeed: false, pacifist: false, combos: 0 },
     badges: []
   };
 }
 
 function loadSave() {
+  let raw = null;
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return defaultSave();
-    const s = JSON.parse(raw);
-    const d = defaultSave();
-    return {
-      best: Object.assign(d.best, s.best),
-      levelBest: s.levelBest || {},
-      stars: s.stars || {},
-      settings: Object.assign(d.settings, s.settings),
-      skin: s.skin || 'emerald',
-      seenHint: !!s.seenHint,
-      stats: Object.assign(d.stats, s.stats),
-      badges: s.badges || []
-    };
+    raw = localStorage.getItem(SAVE_KEY);
   } catch (_) {
     return defaultSave();
   }
+  if (!raw) return defaultSave();
+  let s = null;
+  try {
+    s = JSON.parse(raw);
+  } catch (_) {
+    try { localStorage.setItem(SAVE_KEY + '.corrupt', raw); } catch (_) {}
+    return defaultSave();
+  }
+  const d = defaultSave();
+  return {
+    best: Object.assign(d.best, s.best),
+    levelBest: s.levelBest || {},
+    stars: s.stars || {},
+    settings: Object.assign(d.settings, s.settings),
+    skin: s.skin || 'emerald',
+    seenHint: !!s.seenHint,
+    stats: Object.assign(d.stats, s.stats),
+    badges: s.badges || []
+  };
 }
 
 const BADGES = [
@@ -47,7 +52,10 @@ const BADGES = [
   { id: 'goldenhunter', name: 'Golden Hunter', desc: 'Catch 15 golden berries', test: s => s.stats.golden >= 15 },
   { id: 'shroomlord', name: 'Shroom Lord', desc: 'Use 25 power-ups', test: s => s.stats.powerups >= 25 },
   { id: 'speeddemon', name: 'Speed Demon', desc: 'Hit top speed in Classic', test: s => !!s.stats.topspeed },
-  { id: 'pacifist', name: 'Pacifist', desc: 'Finish a level eating no prey', test: s => !!s.stats.pacifist }
+  { id: 'pacifist', name: 'Pacifist', desc: 'Finish a level eating no prey', test: s => !!s.stats.pacifist },
+  { id: 'dragonflyhunter', name: 'Dragonfly Ace', desc: 'Catch 5 swift dragonflies', test: s => (s.stats.dragonflies || 0) >= 5 },
+  { id: 'combomaster', name: 'Combo Master', desc: 'Hit a 5× combo multiplier', test: s => (s.stats.combos || 0) >= 5 },
+  { id: 'aurora', name: 'Cosmic Traveler', desc: 'Earn 25 stars in Garden', test: s => Object.values(s.stars).reduce((a, b) => a + b, 0) >= 25 }
 ];
 
 const CAUSE_TITLE = {
@@ -86,7 +94,7 @@ class Game {
     this.time = 0;
     this.acc = 0;
     this.tInterp = 0;
-    this.stepMs = 145;
+    this.stepMs = CONFIG.stepMs.classic;
     this.burst = false;
     this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0 };
     this.taTime = 0;
@@ -106,6 +114,12 @@ class Game {
     this.biomeStage = 0;
     this.newBestShown = false;
     this.streakAcc = 0;
+    this.run = null;
+    this.startEase = 0;
+    this.milestone = 0;
+    this.lastLen = 0;
+    this.insectCfg = {};
+    this._pan = 0;
     this._lastTickSec = 91;
     this._urgent = false;
     this._lastBurstI = 0;
@@ -124,9 +138,10 @@ class Game {
   }
 
   spawnDemoApple() {
+    const m = CONFIG.spawnMargin || 0;
     for (let i = 0; i < 100; i++) {
-      const x = randi(0, COLS - 1);
-      const y = randi(0, ROWS - 1);
+      const x = randi(m, COLS - 1 - m);
+      const y = randi(m, ROWS - 1 - m);
       if (!this.demoFood.occupied(x, y) && Math.abs(this.demoSnake.head.x - x) + Math.abs(this.demoSnake.head.y - y) >= 4) {
         this.demoFood.items.push({ type: 'apple', gx: x, gy: y, age: 0, hop: 0 });
         return;
@@ -136,8 +151,8 @@ class Game {
 
   updateDemo(dt) {
     this.demoAcc += dt;
-    while (this.demoAcc >= 135) {
-      this.demoAcc -= 135;
+    while (this.demoAcc >= CONFIG.stepMs.demo) {
+      this.demoAcc -= CONFIG.stepMs.demo;
       const s = this.demoSnake;
       const apple = this.demoFood.items[0];
       const turns = [
@@ -152,7 +167,7 @@ class Game {
         const ny = (s.head.y + d.y + ROWS) % ROWS;
         if (s.cells.some((c, i) => i < s.cells.length - 1 && c.x === nx && c.y === ny)) continue;
         const dist = apple ? Math.abs(apple.gx - nx) + Math.abs(apple.gy - ny) : 0;
-        const score = dist + (d === turns[0] ? -0.4 : 0);
+        const score = dist + (d === turns[0] ? -0.4 : 0) + Math.random() * 0.35;
         if (score < bestScore) {
           bestScore = score;
           bestDir = d;
@@ -217,13 +232,26 @@ class Game {
     }
   }
 
-  isFreeCell(x, y) {
+  isPassableCell(x, y) {
     if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return false;
     if (this.obstacles.blocked(x, y)) return false;
     if (this.obstacles.portalAt(x, y)) return false;
+    return true;
+  }
+
+  isFreeCell(x, y) {
+    if (!this.isPassableCell(x, y)) return false;
     if (this.snake.cells.some(c => c.x === x && c.y === y)) return false;
+    if (this.powerups && this.powerups.occupied && this.powerups.occupied(x, y)) return false;
     const h = this.snake.head;
-    if (Math.abs(h.x - x) + Math.abs(h.y - y) < 3) return false;
+    if (h && Math.abs(h.x - x) + Math.abs(h.y - y) < 3) return false;
+    return true;
+  }
+
+  isMagnetSafe(x, y) {
+    if (!this.isPassableCell(x, y)) return false;
+    if (this.snake.cells.some(c => c.x === x && c.y === y)) return false;
+    if (this.powerups.occupied(x, y)) return false;
     return true;
   }
 
@@ -408,6 +436,8 @@ class Game {
 
   startRun(mode, levelIdx = -1) {
     this.sound.unlock();
+    this.ui.closeSettingsModal();
+    this.ui.closeGuide();
     this.mode = mode;
     this.levelIdx = levelIdx;
     const lv = mode === 'level' ? LEVELS[levelIdx] : null;
@@ -430,17 +460,17 @@ class Game {
     this.powerups.reset();
     this.particles.clear();
     this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0 };
-    this.stepMs = mode === 'level' ? lv.stepMs : mode === 'timeattack' ? 125 : mode === 'zen' ? 165 : 145;
+    this.stepMs = mode === 'level' ? lv.stepMs : CONFIG.stepMs[mode] || CONFIG.stepMs.classic;
     this.acc = 0;
     this.tInterp = 0;
     this.burst = false;
-    this.run = { score: 0, apples: 0, golden: 0, insects: 0, powerups: 0, lengthMax: this.snake.length, pacifist: true, time: 0 };
+    this.run = { score: 0, apples: 0, golden: 0, foodEaten: 0, insects: 0, powerups: 0, lengthMax: this.snake.length, pacifist: true, time: 0 };
     this.combo = 0;
     this.comboTimer = 0;
-    this.taTime = mode === 'timeattack' ? 90000 : 0;
+    this.taTime = mode === 'timeattack' ? CONFIG.taStartMs : 0;
     this.insectTimer = 2500;
     this.trailAcc = 0;
-    this.startEase = mode === 'zen' ? 0 : 700;
+    this.startEase = mode === 'zen' ? 0 : CONFIG.easeMs;
     this.milestone = (Math.floor(this.snake.length / 10) + 2) * 10;
     this.lastLen = this.snake.length;
     this._lastBurstI = 0;
@@ -448,7 +478,7 @@ class Game {
     setTimeout(() => {
       if (this.state === 'playing') this.ui.toast(`${{ rainforest: '🌿', oasis: '🏜️', cavern: '💎', reef: '🌊' }[this.biomeKey] || '🌿'} <b>${biomeName}</b>`);
     }, 650);
-    this.insectCfg = mode === 'level' ? lv.insects : mode === 'timeattack' ? { firefly: 1, beetle: 2 } : mode === 'zen' ? { firefly: 1 } : { firefly: 1, beetle: 1 };
+    this.insectCfg = mode === 'level' ? lv.insects : mode === 'timeattack' ? { firefly: 1, beetle: 2, dragonfly: 1 } : mode === 'zen' ? { firefly: 1 } : { firefly: 1, beetle: 1, dragonfly: 1 };
     for (const kind of Object.keys(this.insectCfg)) {
       for (let i = 0; i < this.insectCfg[kind]; i++) this.food.spawnInsect(kind, (x, y) => this.isFreeCell(x, y));
     }
@@ -483,6 +513,16 @@ class Game {
   }
 
   gotoMenu() {
+    if (this.mode === 'zen' && this.run && (this.state === 'playing' || this.state === 'paused')) {
+      this.run.time = Math.max(this.run.time, 0);
+      this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
+      if (this.snake.length > this.save.best.zen) {
+        this.save.best.zen = this.snake.length;
+        this.ui.toast(`🪷 New Zen best length: <b>${this.snake.length}</b>`);
+        this.sound.achieve();
+      }
+      this.checkBadges();
+    }
     this.state = 'menu';
     this.mode = 'classic';
     this.obstacles.clear();
@@ -514,10 +554,20 @@ class Game {
     );
   }
 
+  clearTransientHUD() {
+    this.ui.updateHUD({ combo: null, bar: null });
+    this.ui.setChips([]);
+  }
+
   togglePause() {
     if (this.state === 'playing') {
       this.state = 'paused';
       this.burst = false;
+      if (this._lastBurstI) {
+        this._lastBurstI = 0;
+        this.sound.setIntensity(0);
+      }
+      this.clearTransientHUD();
       this.ui.showPauseStats({
         score: this.run.score,
         length: this.snake.length,
@@ -527,17 +577,18 @@ class Game {
       this.ui.showScreen('pause');
     } else if (this.state === 'paused') {
       this.state = 'playing';
+      this.hudTimer = CONFIG.hudThrottleMs;
       this.ui.showScreen(null);
     }
   }
 
   openSettings() {
     this.ui.syncSettings(this.save.settings);
-    document.getElementById('modal-settings').classList.remove('hidden');
+    this.ui.openSettingsModal();
   }
 
   closeSettings() {
-    document.getElementById('modal-settings').classList.add('hidden');
+    this.ui.closeSettingsModal();
   }
 
   applySettings() {
@@ -548,17 +599,23 @@ class Game {
   }
 
   consume(kind) {
-    const mult = (this.effects.multi > 0 ? 2 : 1) * (this.mode === 'timeattack' ? Math.max(1, this.combo) : 1);
-    const base = kind === 'apple' ? 10 : 50;
-    const gain = base * Math.max(1, mult);
+    this.combo = Math.min(CONFIG.comboMax, this.combo + 1);
+    this.comboTimer = CONFIG.comboMs;
+    if (this.combo >= CONFIG.comboMax) {
+      this.save.stats.combos = Math.max(this.save.stats.combos || 0, CONFIG.comboMax);
+    }
+    const comboMult = this.combo > 1 ? 1 + (this.combo - 1) * CONFIG.comboStep : 1;
+    const mult = (this.effects.multi > 0 ? 2 : 1) * comboMult;
+    const base = kind === 'apple' ? CONFIG.gains.apple : CONFIG.gains.golden;
+    const gain = Math.round(base * mult);
     this.run.score += gain;
     this.snake.grow(kind === 'apple' ? 1 : 2);
     this.snake.eatPulse();
-    this.run.apples++;
-    if (kind === 'golden') this.run.golden++;
+    if (kind === 'apple') this.run.apples++; else this.run.golden++;
+    this.run.foodEaten++;
     if (kind === 'apple') this.save.stats.apples++; else this.save.stats.golden++;
     if (this.mode === 'classic') {
-      const stage = Math.floor(this.run.apples / 12) % BIOME_ORDER.length;
+      const stage = Math.floor(this.run.foodEaten / 12) % BIOME_ORDER.length;
       if (stage !== this.biomeStage) {
         this.biomeStage = stage;
         this.setBiome(BIOME_ORDER[stage]);
@@ -576,40 +633,61 @@ class Game {
       this.sound.golden(this._pan);
       buzz([16, 24, 16]);
     }
-    this.particles.popup(hx, hy - this.view.cell * 0.6, '+' + gain, mult > 1 ? '#ffd54a' : '#eaf5ec', mult > 1 ? 19 : 15);
+    if (this.combo > 1) this.sound.comboChime(this.combo, this._pan);
+    const popColor = this.combo >= 4 ? '#ff69b4' : this.combo > 1 || mult > 1 ? '#ffd54a' : '#eaf5ec';
+    this.particles.popup(hx, hy - this.view.cell * 0.6, '+' + gain + (this.combo > 1 ? ` (×${this.combo})` : ''), popColor, this.combo > 2 ? 18 : 15);
     if (this.mode === 'timeattack') {
-      this.taTime += kind === 'apple' ? 3000 : 6000;
-      this.combo = Math.min(5, this.combo + 1);
-      this.comboTimer = 4000;
+      this.taTime += kind === 'apple' ? CONFIG.taAppleBonus : CONFIG.taGoldenBonus;
     }
     this.checkBadges();
-    this.maybeNewBest(gain);
+    this.maybeNewBest();
   }
 
   consumeInsect(kind) {
-    const mult = (this.effects.multi > 0 ? 2 : 1) * (this.mode === 'timeattack' ? Math.max(1, this.combo) : 1);
-    const gain = (kind === 'firefly' ? 30 : 40) * Math.max(1, mult);
+    this.combo = Math.min(CONFIG.comboMax, this.combo + 1);
+    this.comboTimer = CONFIG.comboMs;
+    if (this.combo >= CONFIG.comboMax) {
+      this.save.stats.combos = Math.max(this.save.stats.combos || 0, CONFIG.comboMax);
+    }
+    const comboMult = this.combo > 1 ? 1 + (this.combo - 1) * CONFIG.comboStep : 1;
+    const mult = (this.effects.multi > 0 ? 2 : 1) * comboMult;
+    const base = CONFIG.gains[kind] || CONFIG.gains.beetle;
+    const gain = Math.round(base * mult);
     this.run.score += gain;
     this.run.insects++;
     this.run.pacifist = false;
     this.save.stats.insects++;
-    this.snake.grow(1);
+    if (kind === 'dragonfly') {
+      this.save.stats.dragonflies = (this.save.stats.dragonflies || 0) + 1;
+    }
+    this.snake.grow(kind === 'dragonfly' ? 2 : 1);
     this.snake.eatPulse();
     const hx = this.view.cx(this.snake.head.x);
     const hy = this.view.cy(this.snake.head.y);
-    this.particles.burst(hx, hy, {
-      count: 12,
-      colors: kind === 'firefly' ? ['#d4ff78', '#f0ffc4'] : ['#8d6e63', '#d7ccc8'],
-      speed: 0.13, size: 2, life: 600, type: 'glow'
-    });
-    this.particles.popup(hx, hy - this.view.cell * 0.6, '+' + gain, '#d4ff78', 16);
-    this.sound.insect(this._pan);
-    buzz(10);
-    if (this.mode === 'timeattack') {
-      this.taTime += 5000;
-      this.combo = Math.min(5, this.combo + 1);
-      this.comboTimer = 4000;
+    if (kind === 'dragonfly') {
+      this.particles.burst(hx, hy, {
+        count: 18,
+        colors: ['#00f5d4', '#00b4d8', '#90e0ef', '#ffffff'],
+        speed: 0.16, size: 2.5, life: 750, type: 'spark'
+      });
+      this.sound.dragonfly(this._pan);
+    } else {
+      this.particles.burst(hx, hy, {
+        count: 12,
+        colors: kind === 'firefly' ? ['#d4ff78', '#f0ffc4'] : ['#8d6e63', '#d7ccc8'],
+        speed: 0.13, size: 2, life: 600, type: 'glow'
+      });
+      this.sound.insect(this._pan);
     }
+    if (this.combo > 1) this.sound.comboChime(this.combo, this._pan);
+    buzz(12);
+    const popColor = kind === 'dragonfly' ? '#00f5d4' : '#d4ff78';
+    this.particles.popup(hx, hy - this.view.cell * 0.6, '+' + gain + (this.combo > 1 ? ` (×${this.combo})` : ''), popColor, 17);
+    if (this.mode === 'timeattack') {
+      this.taTime += kind === 'dragonfly' ? CONFIG.taDragonflyBonus : kind === 'beetle' ? CONFIG.taBeetleBonus : CONFIG.taFireflyBonus;
+    }
+    this.checkBadges();
+    this.maybeNewBest();
   }
 
   maybeNewBest() {
@@ -651,7 +729,9 @@ class Game {
       for (const c of removed) {
         this.particles.burst(this.view.cx(c.x), this.view.cy(c.y), { count: 8, colors: [meta.color, '#ffd9ef'], speed: 0.1, size: 2.2, life: 550 });
       }
-      this.particles.popup(hx, hy + this.view.cell, '-' + removed.length + ' tail', meta.color, 14);
+      if (removed.length) {
+        this.particles.popup(hx, hy + this.view.cell, '-' + removed.length + ' tail', meta.color, 14);
+      }
     } else {
       this.effects[type] = meta.dur;
     }
@@ -661,6 +741,12 @@ class Game {
   die(cause) {
     this.state = 'over';
     this.dissolving = true;
+    this.burst = false;
+    if (this._lastBurstI) {
+      this._lastBurstI = 0;
+      this.sound.setIntensity(0);
+    }
+    this.clearTransientHUD();
     this.sound.death();
     this.sound.duck();
     buzz([60, 40, 90]);
@@ -718,6 +804,7 @@ class Game {
 
   completeLevel() {
     this.state = 'complete';
+    this.clearTransientHUD();
     const lv = LEVELS[this.levelIdx];
     const sc = this.run.score;
     const stars = sc >= lv.stars[2] ? 3 : sc >= lv.stars[1] ? 2 : 1;
@@ -766,7 +853,9 @@ class Game {
       return;
     }
     const h = this.snake.head;
-    if (this.effects.magnet > 0) this.food.magnetPull(h, (x, y) => this.isFreeCell(x, y));
+    if (this.effects.magnet > 0) {
+      this.food.magnetPull(h, (x, y) => this.isMagnetSafe(x, y));
+    }
     const item = this.food.collideCell(h.x, h.y);
     if (item) this.consume(item.type === 'apple' ? 'apple' : 'golden');
     const ins = this.food.insectHit(this.view.cx(h.x), this.view.cy(h.y), this.view.cell);
@@ -791,8 +880,8 @@ class Game {
     }
     this.run.lengthMax = Math.max(this.run.lengthMax, this.snake.length);
     if (this.mode === 'classic') {
-      this.stepMs = clamp(145 - this.run.apples * 2.1, 68, 145);
-      if (this.stepMs <= 80 && !this.save.stats.topspeed) {
+      this.stepMs = clamp(CONFIG.stepMs.classic - this.run.foodEaten * CONFIG.speedPerApple, CONFIG.minStepMs, CONFIG.stepMs.classic);
+      if (this.stepMs <= CONFIG.topSpeedMs && !this.save.stats.topspeed) {
         this.save.stats.topspeed = true;
         this.checkBadges();
       }
@@ -804,12 +893,12 @@ class Game {
 
   updateHUDFrame(dt) {
     this.hudTimer += dt;
-    if (this.hudTimer < 110) return;
+    if (this.hudTimer < CONFIG.hudThrottleMs) return;
     this.hudTimer = 0;
     let stats;
     if (this.mode === 'timeattack') {
       const t = Math.max(0, this.taTime / 1000).toFixed(1);
-      stats = [{ v: t, l: 'Time', cls: this.taTime <= 10000 ? 'danger' : '' }];
+      stats = [{ v: t, l: 'Time', cls: this.taTime <= CONFIG.taUrgentMs ? 'danger' : '' }];
     } else if (this.mode === 'level') {
       const goal = LEVELS[this.levelIdx].goalApples;
       stats = [
@@ -819,7 +908,7 @@ class Game {
     } else if (this.mode === 'zen') {
       stats = [{ v: String(this.snake.length), l: 'Length' }];
     } else {
-      const speed = (145 / this.stepMs).toFixed(1) + '×';
+      const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
       stats = [
         { v: String(this.snake.length), l: 'Length' },
         { v: String(this.run.apples), l: 'Apples' },
@@ -831,14 +920,17 @@ class Game {
       const goal = LEVELS[this.levelIdx].goalApples;
       bar = { frac: this.run.apples / goal, color: 'var(--accent)' };
     } else if (this.mode === 'timeattack') {
-      const frac = clamp(this.taTime / 90000, 0, 1);
-      bar = { frac, color: this.taTime <= 10000 ? '#ff6b6b' : 'var(--gold)' };
+      const frac = clamp(this.taTime / CONFIG.taStartMs, 0, 1);
+      bar = { frac, color: this.taTime <= CONFIG.taUrgentMs ? '#ff6b6b' : 'var(--gold)' };
+    } else if (this.combo > 1) {
+      const frac = clamp(this.comboTimer / CONFIG.comboMs, 0, 1);
+      bar = { frac, color: this.combo >= 4 ? '#ff69b4' : 'var(--gold)' };
     }
     this.ui.updateHUD({
       score: this.run.score,
       best: this.currentBest(),
       stats,
-      combo: this.mode === 'timeattack' && this.combo > 1 ? `COMBO ×${this.combo}` : null,
+      combo: this.combo > 1 ? `COMBO ×${this.combo}` : null,
       bar
     });
     const chips = [];
@@ -881,17 +973,17 @@ class Game {
         }
       }
     }
-    const effDt = dt * (this.effects.slow > 0 ? 0.5 : 1);
+    const effDt = dt * (this.effects.slow > 0 ? CONFIG.slowMul : 1);
     this.run.time += dt;
     let easeMul = 1;
     if (this.startEase > 0) {
       this.startEase -= dt;
-      easeMul = 1 + 0.7 * Math.max(0, this.startEase / 700);
+      easeMul = 1 + CONFIG.easeBoost * Math.max(0, this.startEase / CONFIG.easeMs);
     }
-    const sms = this.stepMs * easeMul * (this.burst ? 0.55 : 1);
+    const sms = this.stepMs * easeMul * (this.burst ? CONFIG.burstMul : 1);
     this.acc += effDt;
     let guard = 0;
-    while (this.acc >= sms && guard < 4) {
+    while (this.acc >= sms && guard < CONFIG.maxStepCatchup) {
       this.acc -= sms;
       guard++;
       this.doStep();
@@ -910,7 +1002,7 @@ class Game {
     this.obstacles.update(dt);
     this.insectTimer -= dt;
     if (this.insectTimer <= 0) {
-      this.insectTimer = 2600;
+      this.insectTimer = CONFIG.insectRespawnMs;
       for (const kind of Object.keys(this.insectCfg)) {
         const have = this.food.insects.filter(n => n.kind === kind).length;
         if (have < this.insectCfg[kind] && Math.random() < 0.5) {
@@ -918,7 +1010,7 @@ class Game {
         }
       }
     }
-    if (!this.food.items.some(i => i.type === 'golden') && Math.random() < dt * 0.00009) {
+    if (!this.food.items.some(i => i.type === 'golden') && Math.random() < dt * CONFIG.goldenRatePerMs) {
       if (this.food.trySpawnGolden((x, y) => this.isFreeCell(x, y))) {
         const g = this.food.items.find(i => i.type === 'golden');
         if (g) {
@@ -928,7 +1020,7 @@ class Game {
         }
       }
     }
-    if (this.powerups.field.length === 0 && Math.random() < dt * 0.00007) {
+    if (this.powerups.field.length === 0 && Math.random() < dt * CONFIG.powerupRatePerMs) {
       this.powerups.spawn((x, y) => this.isFreeCell(x, y));
       if (this.powerups.field.length) {
         const p = this.powerups.field[this.powerups.field.length - 1];
@@ -938,10 +1030,15 @@ class Game {
         });
       }
     }
+    if (this.comboTimer > 0) {
+      this.comboTimer -= dt;
+      if (this.comboTimer <= 0) {
+        this.comboTimer = 0;
+        this.combo = 0;
+      }
+    }
     if (this.mode === 'timeattack') {
       this.taTime -= dt;
-      this.comboTimer -= dt;
-      if (this.comboTimer <= 0) this.combo = 0;
       const wholeSec = Math.ceil(this.taTime / 1000);
       if (wholeSec !== this._lastTickSec) {
         this._lastTickSec = wholeSec;
@@ -950,6 +1047,12 @@ class Game {
       if (this.taTime <= 0) {
         this.taTime = 0;
         this.state = 'over';
+        this.burst = false;
+        if (this._lastBurstI) {
+          this._lastBurstI = 0;
+          this.sound.setIntensity(0);
+        }
+        this.clearTransientHUD();
         this.finishRun(false, "Time's Up!", true);
         return;
       }
@@ -988,7 +1091,7 @@ class Game {
       this._lastBurstI = burstI;
       this.sound.setIntensity(burstI);
     }
-    const urgent = this.mode === 'timeattack' && this.taTime <= 10000;
+    const urgent = this.mode === 'timeattack' && this.taTime <= CONFIG.taUrgentMs;
     if (urgent !== this._urgent) {
       this._urgent = urgent;
       this.ui.setUrgent(urgent);
@@ -1012,10 +1115,11 @@ class Game {
     this.powerups.render(ctx, v, this.time);
     this.food.render(ctx, v, this.time);
     if (this.state === 'menu') {
-      const dh = this.demoSnake.headPos(v, clamp(this.demoAcc / 135, 0, 1));
+      const dt2 = clamp(this.demoAcc / CONFIG.stepMs.demo, 0, 1);
+      const dh = this.demoSnake.headPos(v, dt2);
       const dnear = this.demoFood.getNearestItemPx(dh.px, dh.py, v.cell);
       this.demoFood.render(ctx, v, this.time);
-      this.demoSnake.render(ctx, v, clamp(this.demoAcc / 135, 0, 1), this.time, {
+      this.demoSnake.render(ctx, v, dt2, this.time, {
         ghost: false,
         lookX: dnear ? dnear.x : null,
         lookY: dnear ? dnear.y : null
@@ -1026,7 +1130,9 @@ class Game {
       let lookX = null;
       let lookY = null;
       const hp = this.snake.headPos(v, this.tInterp);
-      const near = this.food.getNearestItemPx(hp.px, hp.py, v.cell);
+      const wx = ((hp.px % v.w) + v.w) % v.w;
+      const wy = ((hp.py % v.h) + v.h) % v.h;
+      const near = this.food.getNearestItemPx(wx, wy, v.cell);
       if (near && near.d < v.cell * 8) {
         lookX = near.x;
         lookY = near.y;
@@ -1093,6 +1199,7 @@ const ui = new UIManager({
   onNextLevel() { game.startRun('level', game.levelIdx + 1); },
   onResetProgress() {
     game.save = defaultSave();
+    game.persist();
     game.applySettings();
     game.refreshMenuStats();
     ui.toast('🗑 Progress reset');
@@ -1100,6 +1207,61 @@ const ui = new UIManager({
   onSettingsChange(patch) {
     Object.assign(game.save.settings, patch);
     game.applySettings();
+  },
+  onPreviewSound(type) {
+    sound.unlock();
+    sound.sliderPreview(type);
+  },
+  onBurstHint() {
+    ui.toast('⚡ Second finger = <b>speed burst</b>');
+  },
+  onExportSave() {
+    const data = JSON.stringify(game.save);
+    const done = () => ui.toast('💾 Save copied to clipboard');
+    const fallback = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = data;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        done();
+      } catch (_) {
+        ui.toast('⚠ Export failed');
+      }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(data).then(done, fallback);
+    } else {
+      fallback();
+    }
+  },
+  onImportSave() {
+    const txt = prompt('Paste your BioSerpent save JSON:');
+    if (txt === null) return;
+    try {
+      const obj = JSON.parse(txt);
+      if (!obj || typeof obj !== 'object' || !obj.best || !obj.settings) throw new Error('shape');
+      const d = defaultSave();
+      game.save = {
+        best: Object.assign(d.best, obj.best),
+        levelBest: obj.levelBest || {},
+        stars: obj.stars || {},
+        settings: Object.assign(d.settings, obj.settings),
+        skin: obj.skin || 'emerald',
+        seenHint: !!obj.seenHint,
+        stats: Object.assign(d.stats, obj.stats),
+        badges: obj.badges || []
+      };
+      game.persist();
+      game.applySettings();
+      ui.syncSettings(game.save.settings);
+      game.refreshMenuStats();
+      ui.toast('💾 Save imported');
+    } catch (_) {
+      ui.toast('⚠ Invalid save data');
+    }
   }
 });
 
@@ -1113,8 +1275,11 @@ const input = new InputManager(stage, {
     if (game.state === 'playing' || game.state === 'paused') game.togglePause();
   },
   onEscape() {
-    const modal = document.getElementById('modal-settings');
-    if (!modal.classList.contains('hidden')) {
+    if (ui.isGuideOpen()) {
+      ui.closeGuide();
+      return;
+    }
+    if (ui.isSettingsOpen()) {
       game.closeSettings();
       return;
     }
@@ -1140,8 +1305,11 @@ const input = new InputManager(stage, {
     }
   },
   onConfirm() {
-    const modal = document.getElementById('modal-settings');
-    if (!modal.classList.contains('hidden')) return;
+    if (ui.isGuideOpen()) {
+      ui.closeGuide();
+      return;
+    }
+    if (ui.isSettingsOpen()) return;
     if (game.state === 'menu') {
       if (!ui.isScreenOpen()) game.startRun('classic');
     } else if (game.state === 'over') {
@@ -1167,13 +1335,20 @@ game.refreshMenuStats();
 const loop = new GameLoop(dt => game.update(dt), () => game.render());
 loop.start();
 
+let _rzT = null;
 window.addEventListener('resize', () => {
   view.resize();
-  game.onResize();
+  clearTimeout(_rzT);
+  _rzT = setTimeout(() => game.onResize(), 150);
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && game.state === 'playing') game.togglePause();
+  if (document.hidden) {
+    if (game.state === 'playing') game.togglePause();
+    sound.setSuspended(true);
+  } else {
+    sound.setSuspended(false);
+  }
 });
 
 window.addEventListener('blur', () => {

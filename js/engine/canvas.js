@@ -17,6 +17,40 @@ const COLS = 20;
 const ROWS = 20;
 const TAU = Math.PI * 2;
 
+const CONFIG = {
+  stepMs: { classic: 145, timeattack: 125, zen: 165, demo: 135 },
+  minStepMs: 68,
+  speedPerApple: 2.1,
+  topSpeedMs: 80,
+  burstMul: 0.55,
+  slowMul: 0.5,
+  easeMs: 700,
+  easeBoost: 0.7,
+  comboMs: 3800,
+  comboMax: 5,
+  comboStep: 0.3,
+  taStartMs: 90000,
+  taUrgentMs: 10000,
+  taAppleBonus: 3000,
+  taGoldenBonus: 6000,
+  taBeetleBonus: 5000,
+  taFireflyBonus: 5000,
+  taDragonflyBonus: 7000,
+  gains: { apple: 10, golden: 50, beetle: 40, firefly: 30, dragonfly: 60 },
+  goldenLifeMs: 11000,
+  powerupLifeMs: 12000,
+  goldenRatePerMs: 0.00009,
+  powerupRatePerMs: 0.00007,
+  insectRespawnMs: 2600,
+  spawnMargin: 1,
+  maxStepCatchup: 4,
+  hudThrottleMs: 110,
+  dprMax: 3
+};
+
+const REDUCED_MOTION = typeof matchMedia === 'function'
+  && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -68,7 +102,7 @@ class View {
     this.cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / ROWS)));
     this.w = this.cell * COLS;
     this.h = this.cell * ROWS;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.dpr = Math.min(window.devicePixelRatio || 1, CONFIG.dprMax);
     this.canvas.style.width = this.w + 'px';
     this.canvas.style.height = this.h + 'px';
     this.canvas.width = Math.round(this.w * this.dpr);
@@ -80,6 +114,6 @@ class View {
   cy(gy) { return (gy + 0.5) * this.cell; }
 }
 
-Object.assign(BS, { COLS, ROWS, TAU, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View });
+Object.assign(BS, { COLS, ROWS, TAU, CONFIG, REDUCED_MOTION, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View });
 
 })(window.BS);

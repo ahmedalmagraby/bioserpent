@@ -3,8 +3,6 @@ window.BS = window.BS || {};
 "use strict";
 const { COLS, ROWS, TAU, mulberry32 } = BS;
 
-"use strict";
-
 class Obstacles {
   constructor() {
     this.rocks = [];

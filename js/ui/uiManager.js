@@ -3,7 +3,7 @@ window.BS = window.BS || {};
 "use strict";
 const { SKINS, drawSkinPreview } = BS;
 
-"use strict";
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 class UIManager {
   constructor(handlers) {
@@ -48,6 +48,8 @@ class UIManager {
     this._wire(this.$('btnSkins'), () => this.h.onSkins());
     this._wire(this.$('btnBadges'), () => this.h.onOpenBadges());
     this._wire(this.$('btnSettings'), () => this.h.onOpenSettings());
+    this._wire(this.$('btnGuide'), () => this.openGuide());
+    this._wire(this.$('btnCloseGuide'), () => this.closeGuide());
     this._wire(this.$('btnPause'), () => this.h.onPauseButton());
     document.querySelectorAll('.back-btn').forEach(b => this._wire(b, () => this.h.onBack(b.dataset.back)));
     this._wire(this.$('btnResume'), () => this.h.onResume());
@@ -60,12 +62,43 @@ class UIManager {
     this._wire(this.$('btnReplay'), () => this.h.onRestart());
     this._wire(this.$('btnCompleteMenu'), () => this.h.onQuit());
     this._wire(this.$('btnCloseSettings'), () => this.h.onCloseSettings());
-    this._wire(this.$('btnResetProgress'), () => this.h.onResetProgress());
-    const modal = this.$('modal-settings');
-    modal.addEventListener('pointerdown', e => {
-      if (e.target === modal) this.h.onCloseSettings();
+    this._wire(this.$('btnExportSave'), () => this.h.onExportSave());
+    this._wire(this.$('btnImportSave'), () => this.h.onImportSave());
+    const btnReset = this.$('btnResetProgress');
+    this._resetArmed = false;
+    this._resetTimer = null;
+    this._wire(btnReset, () => {
+      if (!this._resetArmed) {
+        this._resetArmed = true;
+        btnReset.textContent = '⚠ Tap again to reset';
+        btnReset.classList.add('armed');
+        this._resetTimer = setTimeout(() => this._disarmReset(), 3000);
+      } else {
+        this._disarmReset();
+        this.h.onResetProgress();
+      }
     });
+    
+    const modalSettings = this.$('modal-settings');
+    modalSettings.addEventListener('pointerdown', e => {
+      if (e.target === modalSettings) this.h.onCloseSettings();
+    });
+
+    const modalGuide = this.$('modal-guide');
+    if (modalGuide) {
+      modalGuide.addEventListener('pointerdown', e => {
+        if (e.target === modalGuide) this.closeGuide();
+      });
+      document.querySelectorAll('.guide-tab').forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          this.h.onClick();
+          this.setGuideTab(tabBtn.dataset.tab);
+        });
+      });
+    }
+
     this.el.menuStats.addEventListener('click', () => {
+      this.el.menuStats.blur();
       this.h.onClick();
       this.h.onOpenBadges();
     });
@@ -76,8 +109,14 @@ class UIManager {
       touch: this.$('setTouch'),
       walls: this.$('setWalls')
     };
-    s.music.addEventListener('input', () => this.h.onSettingsChange({ music: s.music.value / 100 }));
-    s.sfx.addEventListener('input', () => this.h.onSettingsChange({ sfx: s.sfx.value / 100 }));
+    s.music.addEventListener('input', () => {
+      this.h.onSettingsChange({ music: s.music.value / 100 });
+      if (this.h.onPreviewSound) this.h.onPreviewSound('music');
+    });
+    s.sfx.addEventListener('input', () => {
+      this.h.onSettingsChange({ sfx: s.sfx.value / 100 });
+      if (this.h.onPreviewSound) this.h.onPreviewSound('sfx');
+    });
     s.mute.addEventListener('change', () => this.h.onSettingsChange({ muted: s.mute.checked }));
     s.touch.addEventListener('change', () => this.h.onSettingsChange({ touch: s.touch.value }));
     s.walls.addEventListener('change', () => this.h.onSettingsChange({ walls: s.walls.value }));
@@ -85,9 +124,56 @@ class UIManager {
 
   _wire(el, fn) {
     el.addEventListener('click', () => {
+      el.blur();
       this.h.onClick();
       fn();
     });
+  }
+
+  _disarmReset() {
+    this._resetArmed = false;
+    clearTimeout(this._resetTimer);
+    const b = this.$('btnResetProgress');
+    b.textContent = 'Reset progress';
+    b.classList.remove('armed');
+  }
+
+  _openModal(m) {
+    if (!m) return;
+    this._prevFocus = document.activeElement;
+    m.classList.remove('hidden');
+    m.addEventListener('keydown', this._trapHandler);
+    const p = m.querySelector('.panel');
+    if (p) {
+      p.setAttribute('tabindex', '-1');
+      p.focus({ preventScroll: true });
+    }
+  }
+
+  _closeModal(m) {
+    if (!m) return;
+    m.classList.add('hidden');
+    m.removeEventListener('keydown', this._trapHandler);
+    if (this._prevFocus && this._prevFocus.focus) {
+      try { this._prevFocus.focus({ preventScroll: true }); } catch (_) { this._prevFocus.focus(); }
+    }
+    this._prevFocus = null;
+  }
+
+  _trapHandler(e) {
+    if (e.key !== 'Tab') return;
+    const modal = e.currentTarget;
+    const f = modal.querySelectorAll(FOCUSABLE);
+    if (!f.length) return;
+    const first = f[0];
+    const last = f[f.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === modal.querySelector('.panel'))) {
+      last.focus();
+      e.preventDefault();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      first.focus();
+      e.preventDefault();
+    }
   }
 
   showScreen(name) {
@@ -182,7 +268,7 @@ class UIManager {
         <div class="lv-goal">🍎 ${lv.goalApples} to win · Best ${best > 0 ? best : '—'}</div>
         <div class="lv-stars">${starsHtml}</div>
         ${unlocked ? '' : '<div class="lv-lock">🔒</div>'}`;
-      if (unlocked) card.addEventListener('click', () => { this.h.onClick(); this.h.onSelectLevel(i); });
+      if (unlocked) card.addEventListener('click', () => { card.blur(); this.h.onClick(); this.h.onSelectLevel(i); });
       else card.title = 'Earn a star on the previous level';
       this.el.levelGrid.appendChild(card);
     });
@@ -221,7 +307,7 @@ class UIManager {
       txt.innerHTML = `<div class="sk-name">${skin.name}</div><div class="sk-hint">${unlocked ? (skin.trail ? '✨ Particle trail' : '✔ Unlocked') : '🔒 ' + skin.hint}</div>`;
       card.appendChild(txt);
       drawSkinPreview(cv, skin);
-      if (unlocked) card.addEventListener('click', () => { this.h.onClick(); this.h.onSelectSkin(skin.id); });
+      if (unlocked) card.addEventListener('click', () => { card.blur(); this.h.onClick(); this.h.onSelectSkin(skin.id); });
       this.el.skinGrid.appendChild(card);
     }
   }
@@ -286,6 +372,74 @@ class UIManager {
     if (html === this._statsHtml) return;
     this._statsHtml = html;
     this.el.hudStats.innerHTML = html;
+  }
+
+  openGuide() {
+    this.setGuideTab('prey');
+    this._openModal(this.$('modal-guide'));
+  }
+
+  closeGuide() {
+    this._closeModal(this.$('modal-guide'));
+  }
+
+  isGuideOpen() {
+    return !this.$('modal-guide').classList.contains('hidden');
+  }
+
+  openSettingsModal() {
+    this._openModal(this.$('modal-settings'));
+  }
+
+  closeSettingsModal() {
+    this._closeModal(this.$('modal-settings'));
+  }
+
+  isSettingsOpen() {
+    return !this.$('modal-settings').classList.contains('hidden');
+  }
+
+  setGuideTab(tab) {
+    document.querySelectorAll('.guide-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    const c = this.$('guideContent');
+    if (!c) return;
+    if (tab === 'prey') {
+      c.innerHTML = `
+        <div class="guide-grid">
+          <div class="guide-card"><div class="g-icon">🍎</div><div><b>Red Apple (+10 pts)</b><p>Primary nourishment. Grows serpent length by 1 and powers combo multipliers.</p></div></div>
+          <div class="guide-card"><div class="g-icon">✨</div><div><b>Golden Berry (+50 pts)</b><p>Rare luminous fruit that pulses with light. Adds +2 length and temporary aura.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🪰</div><div><b>Swift Dragonfly (+60 pts)</b><p>Fast, erratic diagonal flier. Evasive prey that flees when lunged at.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🪲</div><div><b>Ground Beetle (+40 pts)</b><p>Armored crawler patrolling the soil. Adds +1 length and bonus points.</p></div></div>
+          <div class="guide-card"><div class="g-icon">💡</div><div><b>Biolume Firefly (+30 pts)</b><p>Gentle glowing nocturnal flyer drifting serenely through the biomes.</p></div></div>
+        </div>`;
+    } else if (tab === 'powers') {
+      c.innerHTML = `
+        <div class="guide-grid">
+          <div class="guide-card"><div class="g-icon">🧲</div><div><b>Magnet Spore [M]</b><p>Generates a magnetic field pulling all nearby berries directly to your jaws.</p></div></div>
+          <div class="guide-card"><div class="g-icon">⏱</div><div><b>Slow-Mo Amber [S]</b><p>Dilates time by 50%, granting total precision through obstacle mazes.</p></div></div>
+          <div class="guide-card"><div class="g-icon">👻</div><div><b>Ghost Phase [G]</b><p>Phase through your own body and solid stone without taking damage.</p></div></div>
+          <div class="guide-card"><div class="g-icon">✖️</div><div><b>2× Multiplier [×2]</b><p>Doubles all score gains from prey and berries during its active duration.</p></div></div>
+          <div class="guide-card"><div class="g-icon">✂️</div><div><b>Prune Shroom [−3]</b><p>Instantly trims 3 tail segments to squeeze safely through tight tunnels.</p></div></div>
+        </div>`;
+    } else if (tab === 'hazards') {
+      c.innerHTML = `
+        <div class="guide-grid">
+          <div class="guide-card"><div class="g-icon">🌀</div><div><b>Paired Portals</b><p>Quantum vortexes connecting distant sectors. Slither into A to emerge at partner A.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🪨</div><div><b>Ancient Rocks</b><p>Impassable mineral monoliths. Striking them will break your momentum.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🌿</div><div><b>Thorn Brambles</b><p>Sharp defensive botanical hazards. Steer carefully around their perimeter.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🟣</div><div><b>Toxic Spores</b><p>Pulsing cavern fungi emitting poisonous spores upon physical contact.</p></div></div>
+        </div>`;
+    } else {
+      c.innerHTML = `
+        <div class="guide-grid">
+          <div class="guide-card"><div class="g-icon">🔥</div><div><b>Combo System</b><p>Consume food within 3.8s to stack combo streaks from 2× up to 5× points!</p></div></div>
+          <div class="guide-card"><div class="g-icon">⚡</div><div><b>Speed Burst</b><p>Hold <b>Shift</b> on keyboard or <b>⚡</b> on touch to charge forward with a particle tail.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🔄</div><div><b>Wall Wrap Option</b><p>Toggle walls between Solid and Wrap mode in Settings to loop across edges.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🪷</div><div><b>Zen Flow Mode</b><p>Infinite peaceful garden flow with tail ghosting and zero wall death.</p></div></div>
+        </div>`;
+    }
   }
 
   setUrgent(v) {
