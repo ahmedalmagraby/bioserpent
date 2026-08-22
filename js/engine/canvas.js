@@ -93,13 +93,30 @@ class View {
     this.h = 0;
     this.dpr = 1;
     this.resize();
+
+    if (typeof ResizeObserver !== 'undefined' && this.stage) {
+      let rzTimer = null;
+      this._ro = new ResizeObserver(() => {
+        clearTimeout(rzTimer);
+        rzTimer = setTimeout(() => {
+          this.resize();
+          if (BS.game && BS.game.onResize) BS.game.onResize();
+        }, 16);
+      });
+      this._ro.observe(this.stage);
+    }
   }
 
   resize() {
+    if (!this.stage) return;
     const r = this.stage.getBoundingClientRect();
     const cs = getComputedStyle(this.stage);
-    const availW = Math.max(120, r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
-    const availH = Math.max(120, r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const availW = Math.max(120, r.width - padL - padR);
+    const availH = Math.max(120, r.height - padT - padB);
     this.cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / ROWS)));
     this.w = this.cell * COLS;
     this.h = this.cell * ROWS;
@@ -114,6 +131,7 @@ class View {
   cx(gx) { return (gx + 0.5) * this.cell; }
   cy(gy) { return (gy + 0.5) * this.cell; }
 }
+
 
 Object.assign(BS, { COLS, ROWS, TAU, CONFIG, REDUCED_MOTION, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View });
 

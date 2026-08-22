@@ -170,7 +170,7 @@ class Snake {
       return { death: 'wall' };
     }
     const willGrow = this.growPending > 0;
-    if (!env.ghost) {
+    if (!env.ghost && !teleported) {
       const lim = this.cells.length - (willGrow ? 0 : 1);
       for (let i = 0; i < lim; i++) {
         const c = this.cells[i];
@@ -179,6 +179,7 @@ class Snake {
       const ob = env.blocked ? env.blocked(nx, ny) : null;
       if (ob) return { death: ob };
     }
+
     this.cells.unshift({ x: nx, y: ny });
     if (willGrow) this.growPending--; else this.cells.pop();
     this.path.unshift({ x: this.cX, y: this.cY, cut });

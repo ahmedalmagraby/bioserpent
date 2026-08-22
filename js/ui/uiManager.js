@@ -22,13 +22,26 @@ class UIManager {
       menuStats: this.$('menuStats'),
       hudBar: this.$('hudBar'),
       overTitle: this.$('overTitle'),
+      overMode: this.$('overMode'),
       overStats: this.$('overStats'),
       starsBox: this.$('starsBox'),
       completeScore: this.$('completeScore'),
+      completeNextStar: this.$('completeNextStar'),
       btnNext: this.$('btnNext'),
       toasts: this.$('toasts'),
       hudStats: this.$('hudStats'),
-      pauseStats: this.$('pauseStats')
+      pauseStats: this.$('pauseStats'),
+      pauseSub: this.$('pauseSub'),
+      countdown: this.$('countdown'),
+      countdownNum: this.$('countdownNum'),
+      subClassic: this.$('subClassic'),
+      subLevels: this.$('subLevels'),
+      subTimeAttack: this.$('subTimeAttack'),
+      subZen: this.$('subZen'),
+      modalSave: this.$('modal-save'),
+      saveJsonArea: this.$('saveJsonArea'),
+      saveModalTitle: this.$('saveModalTitle'),
+      saveModalSub: this.$('saveModalSub')
     };
     this._statsHtml = '';
     this.screens = {
@@ -54,6 +67,7 @@ class UIManager {
     document.querySelectorAll('.back-btn').forEach(b => this._wire(b, () => this.h.onBack(b.dataset.back)));
     this._wire(this.$('btnResume'), () => this.h.onResume());
     this._wire(this.$('btnPauseRestart'), () => this.h.onRestart());
+    this._wire(this.$('btnPauseGuide'), () => this.openGuide());
     this._wire(this.$('btnPauseSettings'), () => this.h.onOpenSettings());
     this._wire(this.$('btnPauseQuit'), () => this.h.onQuit());
     this._wire(this.$('btnOverRestart'), () => this.h.onRestart());
@@ -64,6 +78,11 @@ class UIManager {
     this._wire(this.$('btnCloseSettings'), () => this.h.onCloseSettings());
     this._wire(this.$('btnExportSave'), () => this.h.onExportSave());
     this._wire(this.$('btnImportSave'), () => this.h.onImportSave());
+    this._wire(this.$('btnSaveCopy'), () => this.h.onSaveModalCopy());
+    this._wire(this.$('btnSaveDownload'), () => this.h.onSaveModalDownload());
+    this._wire(this.$('btnSaveApplyImport'), () => this.h.onSaveModalApplyImport(this.el.saveJsonArea ? this.el.saveJsonArea.value : ''));
+    this._wire(this.$('btnCloseSaveModal'), () => this.closeSaveModal());
+
     const btnReset = this.$('btnResetProgress');
     this._resetArmed = false;
     this._resetTimer = null;
@@ -83,6 +102,13 @@ class UIManager {
     modalSettings.addEventListener('pointerdown', e => {
       if (e.target === modalSettings) this.h.onCloseSettings();
     });
+
+    const modalSave = this.$('modal-save');
+    if (modalSave) {
+      modalSave.addEventListener('pointerdown', e => {
+        if (e.target === modalSave) this.closeSaveModal();
+      });
+    }
 
     const modalGuide = this.$('modal-guide');
     if (modalGuide) {
@@ -121,6 +147,7 @@ class UIManager {
     s.touch.addEventListener('change', () => this.h.onSettingsChange({ touch: s.touch.value }));
     s.walls.addEventListener('change', () => this.h.onSettingsChange({ walls: s.walls.value }));
   }
+
 
   _wire(el, fn) {
     el.addEventListener('click', () => {
@@ -183,14 +210,16 @@ class UIManager {
   }
 
   isScreenOpen() {
-    return Object.values(this.screens).some(el => !el.classList.contains('hidden'));
+    return Object.keys(this.screens).some(k => k !== 'menu' && !this.screens[k].classList.contains('hidden'));
   }
 
   setHUD(vis) {
     this.el.hud.classList.toggle('hidden', !vis);
+    if (this.el.chipBar) this.el.chipBar.classList.toggle('hidden', !vis);
     if (!vis) this.el.chipBar.innerHTML = '';
     this.chips.clear();
   }
+
 
   updateHUD(d) {
     if (d.score !== undefined) this.el.score.textContent = d.score;
@@ -199,23 +228,23 @@ class UIManager {
     if (d.combo !== undefined) {
       if (d.combo) {
         this.el.combo.textContent = d.combo;
-        this.el.combo.classList.remove('hidden');
+        this.el.combo.classList.remove('vis-hidden', 'hidden');
         this.el.combo.classList.remove('pulse');
         void this.el.combo.offsetWidth;
         this.el.combo.classList.add('pulse');
       } else {
-        this.el.combo.classList.add('hidden');
+        this.el.combo.classList.add('vis-hidden');
       }
     }
     if (d.bar !== undefined) {
       const bar = this.el.hudBar;
       if (d.bar) {
-        bar.classList.remove('hidden');
+        bar.classList.remove('vis-hidden', 'hidden');
         const fill = bar.querySelector('i') || bar.firstChild;
         fill.style.width = Math.max(0, Math.min(1, d.bar.frac)) * 100 + '%';
         fill.style.background = d.bar.color || 'var(--accent)';
       } else {
-        bar.classList.add('hidden');
+        bar.classList.add('vis-hidden');
       }
     }
   }
@@ -243,9 +272,12 @@ class UIManager {
     }
   }
 
-  toast(html) {
+  toast(html, category = '') {
+    while (this.el.toasts.children.length >= 4) {
+      this.el.toasts.firstElementChild.remove();
+    }
     const t = document.createElement('div');
-    t.className = 'toast';
+    t.className = 'toast' + (category ? ' ' + category : '');
     t.innerHTML = html;
     this.el.toasts.appendChild(t);
     setTimeout(() => t.remove(), 4000);
@@ -261,20 +293,24 @@ class UIManager {
       let starsHtml = '';
       for (let k = 0; k < 3; k++) starsHtml += `<span class="${k < st ? '' : 'off'}">★</span>`;
       const best = bestFor ? bestFor(i) : 0;
+      const threshHtml = `<div class="lv-thresholds"><span>★ ${lv.stars[0]}</span><span>★★ ${lv.stars[1]}</span><span>★★★ ${lv.stars[2]}</span></div>`;
+      const reqHtml = unlocked ? '' : `<div class="lv-unlock-req">🔒 Complete Level ${i} first</div>`;
       card.innerHTML = `
         <div class="lv-num">LEVEL ${String(i + 1).padStart(2, '0')}</div>
         <div class="lv-name">${lv.name}</div>
         <div class="lv-biome" style="color:${{ rainforest: '#57a05a', oasis: '#d9a95f', cavern: '#6ee7f0', reef: '#54c2d8' }[lv.biome]}">${lv.blurb}</div>
         <div class="lv-goal">🍎 ${lv.goalApples} to win · Best ${best > 0 ? best : '—'}</div>
+        ${threshHtml}
         <div class="lv-stars">${starsHtml}</div>
+        ${reqHtml}
         ${unlocked ? '' : '<div class="lv-lock">🔒</div>'}`;
       if (unlocked) card.addEventListener('click', () => { card.blur(); this.h.onClick(); this.h.onSelectLevel(i); });
-      else card.title = 'Earn a star on the previous level';
+      else card.title = `Earn a star on Level ${i} to unlock`;
       this.el.levelGrid.appendChild(card);
     });
   }
 
-  buildBadges(defs, isEarned) {
+  buildBadges(defs, isEarned, save) {
     this.el.badgeGrid.innerHTML = '';
     const earnedCount = defs.filter(d => isEarned(d.id)).length;
     const head = document.createElement('div');
@@ -285,17 +321,33 @@ class UIManager {
       const earned = isEarned(b.id);
       const card = document.createElement('div');
       card.className = 'card badge-card' + (earned ? '' : ' locked');
+      let progHtml = '';
+      if (!earned && save) {
+        let cur = 0, max = 0;
+        if (b.id === 'centipede') { cur = save.stats.maxLength || 0; max = 30; }
+        else if (b.id === 'fruitsalad') { cur = save.stats.apples || 0; max = 100; }
+        else if (b.id === 'goldenhunter') { cur = save.stats.golden || 0; max = 15; }
+        else if (b.id === 'shroomlord') { cur = save.stats.powerups || 0; max = 25; }
+        else if (b.id === 'dragonflyhunter') { cur = save.stats.dragonflies || 0; max = 5; }
+        else if (b.id === 'combomaster') { cur = save.stats.combos || 0; max = 5; }
+        else if (b.id === 'aurora') { cur = Object.values(save.stars || {}).reduce((a, c) => a + c, 0); max = 25; }
+        if (max > 0) {
+          const frac = Math.min(1, cur / max);
+          progHtml = `<div class="prog-track"><div class="prog-fill" style="width:${Math.round(frac * 100)}%"></div></div><div class="sk-hint" style="color:var(--accent);margin-top:2px;">Progress: ${cur} / ${max}</div>`;
+        }
+      }
       card.innerHTML = `
         <div class="bd-icon">${earned ? '🏅' : '🔒'}</div>
-        <div>
+        <div style="flex:1;min-width:0;">
           <div class="sk-name">${b.name}</div>
           <div class="sk-hint">${b.desc}</div>
+          ${progHtml}
         </div>`;
       this.el.badgeGrid.appendChild(card);
     }
   }
 
-  buildSkins(isUnlocked, currentId) {
+  buildSkins(isUnlocked, currentId, save) {
     this.el.skinGrid.innerHTML = '';
     for (const skin of SKINS) {
       const unlocked = isUnlocked(skin.id);
@@ -303,8 +355,23 @@ class UIManager {
       card.className = 'card skin-card' + (unlocked ? '' : ' locked') + (skin.id === currentId ? ' selected' : '');
       const cv = document.createElement('canvas');
       card.appendChild(cv);
+      let hintText = unlocked ? (skin.trail ? '✨ Particle trail' : '✔ Unlocked') : '🔒 ' + skin.hint;
+      let progHtml = '';
+      if (!unlocked && skin.unlock && save) {
+        const u = skin.unlock;
+        let cur = 0;
+        if (u.type === 'apples') cur = save.stats.apples || 0;
+        else if (u.type === 'classicBest') cur = save.best.classic || 0;
+        else if (u.type === 'stars') cur = Object.values(save.stars || {}).reduce((a, c) => a + c, 0);
+        if (u.value > 0) {
+          const frac = Math.min(1, cur / u.value);
+          progHtml = `<div class="prog-track"><div class="prog-fill" style="width:${Math.round(frac * 100)}%"></div></div>`;
+          hintText = `🔒 ${cur} / ${u.value} (${skin.hint.replace(/^Score |Eat |Earn /, '')})`;
+        }
+      }
       const txt = document.createElement('div');
-      txt.innerHTML = `<div class="sk-name">${skin.name}</div><div class="sk-hint">${unlocked ? (skin.trail ? '✨ Particle trail' : '✔ Unlocked') : '🔒 ' + skin.hint}</div>`;
+      txt.style.cssText = 'flex:1;min-width:0;';
+      txt.innerHTML = `<div class="sk-name">${skin.name}</div><div class="sk-hint">${hintText}</div>${progHtml}`;
       card.appendChild(txt);
       drawSkinPreview(cv, skin);
       if (unlocked) card.addEventListener('click', () => { card.blur(); this.h.onClick(); this.h.onSelectSkin(skin.id); });
@@ -320,8 +387,29 @@ class UIManager {
     this.$('setWalls').value = s.walls || 'solid';
   }
 
+  updateMenuSubLabels(bests, starsSum, totalStars = 36) {
+    if (this.el.subClassic) this.el.subClassic.textContent = `Best: ${bests.classic || 0}`;
+    if (this.el.subLevels) this.el.subLevels.textContent = `${starsSum || 0} / ${totalStars} ★`;
+    if (this.el.subTimeAttack) this.el.subTimeAttack.textContent = `Best: ${bests.timeattack || 0}`;
+    if (this.el.subZen) this.el.subZen.textContent = `Best Length: ${bests.zen || 0}`;
+  }
+
+  showCountdown(num) {
+    if (!this.el.countdown || !this.el.countdownNum) return;
+    this.el.countdownNum.textContent = String(num);
+    this.el.countdown.classList.remove('hidden');
+    this.el.countdownNum.style.animation = 'none';
+    void this.el.countdownNum.offsetWidth;
+    this.el.countdownNum.style.animation = 'countPop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) forwards';
+  }
+
+  hideCountdown() {
+    if (this.el.countdown) this.el.countdown.classList.add('hidden');
+  }
+
   gameOver(d) {
     this.el.overTitle.textContent = d.title;
+    if (this.el.overMode) this.el.overMode.textContent = d.modeName || '';
     let rows = `<div>Score</div><b>${d.score}</b>`;
     rows += `<div>${d.newBest ? '<span class="new-best">★ NEW BEST!</span>' : 'Best ' + d.best}</div>`;
     rows += `<div class="over-grid">` +
@@ -334,7 +422,8 @@ class UIManager {
     this.showScreen('over');
   }
 
-  showPauseStats(s) {
+  showPauseStats(s, modeTitle = '') {
+    if (this.el.pauseSub) this.el.pauseSub.textContent = modeTitle;
     this.el.pauseStats.innerHTML =
       `<span class="stat"><b>${s.score}</b><small>Score</small></span>` +
       `<span class="stat"><b>${s.length}</b><small>Length</small></span>` +
@@ -352,6 +441,18 @@ class UIManager {
       this.el.starsBox.appendChild(s);
     }
     this.el.completeScore.innerHTML = `Score <b>${d.score}</b>`;
+    if (this.el.completeNextStar) {
+      if (d.stars < 3 && d.nextStarScore) {
+        const nextStarsStr = d.stars === 1 ? '★★' : '★★★';
+        this.el.completeNextStar.textContent = `🎯 Need ${d.nextStarScore} pts for ${nextStarsStr}`;
+        this.el.completeNextStar.classList.remove('hidden');
+      } else if (d.stars === 3) {
+        this.el.completeNextStar.textContent = `🌟 Mastered! (3/3 Stars)`;
+        this.el.completeNextStar.classList.remove('hidden');
+      } else {
+        this.el.completeNextStar.classList.add('hidden');
+      }
+    }
     this.el.btnNext.classList.toggle('hidden', !d.hasNext);
     this.showScreen('complete');
   }
@@ -398,6 +499,23 @@ class UIManager {
 
   isSettingsOpen() {
     return !this.$('modal-settings').classList.contains('hidden');
+  }
+
+  openSaveModal(jsonStr = '', isExport = true) {
+    if (this.el.saveModalTitle) this.el.saveModalTitle.textContent = isExport ? 'Export Save Data' : 'Import Save Data';
+    if (this.el.saveModalSub) this.el.saveModalSub.textContent = isExport ? 'Copy your JSON save or download it as a backup file' : 'Paste your BioSerpent JSON save below and click Import';
+    if (this.el.saveJsonArea) this.el.saveJsonArea.value = jsonStr;
+    const btnImport = this.$('btnSaveApplyImport');
+    if (btnImport) btnImport.classList.toggle('hidden', isExport);
+    this._openModal(this.el.modalSave);
+  }
+
+  closeSaveModal() {
+    this._closeModal(this.el.modalSave);
+  }
+
+  isSaveModalOpen() {
+    return this.el.modalSave && !this.el.modalSave.classList.contains('hidden');
   }
 
   setGuideTab(tab) {
@@ -451,3 +569,4 @@ class UIManager {
 Object.assign(BS, { UIManager });
 
 })(window.BS);
+

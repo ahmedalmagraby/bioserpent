@@ -71,7 +71,11 @@ class FoodManager {
 
   spawnApple(isFree) {
     const c = this.randomFree(isFree);
-    if (c) this.items.push({ type: 'apple', gx: c.x, gy: c.y, age: rand(0, 3000), hop: 0, pop: 0 });
+    if (c) {
+      this.items.push({ type: 'apple', gx: c.x, gy: c.y, age: rand(0, 3000), hop: 0, pop: 0 });
+      return true;
+    }
+    return false;
   }
 
   trySpawnGolden(isFree) {
@@ -84,7 +88,7 @@ class FoodManager {
 
   spawnInsect(kind, isFree) {
     const c = this.randomFree(isFree);
-    if (!c) return;
+    if (!c) return false;
     const dur = kind === 'dragonfly' ? 240 : kind === 'beetle' ? 320 : 460;
     this.insects.push({
       kind,
@@ -96,7 +100,9 @@ class FoodManager {
       wing: rand(0, TAU),
       pop: 0
     });
+    return true;
   }
+
 
   magnetPull(head, canLand) {
     for (const it of this.items) {
@@ -205,12 +211,14 @@ class FoodManager {
       const p = this.insectPos(n);
       const ix = (p.x + 0.5) * cell;
       const iy = (p.y + 0.5) * cell;
-      if (Math.hypot(ix - px, iy - py) < cell * 0.66) {
+      const threshold = cell * (n.kind === 'dragonfly' ? 0.88 : 0.66);
+      if (Math.hypot(ix - px, iy - py) < threshold) {
         return this.insects.splice(i, 1)[0];
       }
     }
     return null;
   }
+
 
   getNearestItemPx(px, py, cell) {
     let best = null;

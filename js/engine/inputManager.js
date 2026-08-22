@@ -90,6 +90,13 @@ class InputManager {
       if (!e.repeat && this.h.onRestartKey) this.h.onRestartKey();
       return;
     }
+    if (e.key === '?' || e.code === 'KeyH') {
+      if (!e.repeat && this.h.onGuideKey) {
+        this.h.onGuideKey();
+        e.preventDefault();
+        return;
+      }
+    }
     const t = e.target;
     if (t && t.closest && t.closest('input, select, textarea, button, a')) return;
     const dir = KEY_DIR[e.code];
@@ -110,11 +117,15 @@ class InputManager {
     }
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
       this.h.onBurst(true);
+      this.setBurstVisual(true);
     }
   }
 
   onKeyUp(e) {
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.h.onBurst(false);
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      this.h.onBurst(false);
+      this.setBurstVisual(false);
+    }
   }
 
   pos(e) {
@@ -132,15 +143,18 @@ class InputManager {
         this.showRipple(p.x, p.y);
       } else if (this.mode === 'joystick') {
         this._joyId = e.pointerId;
-        this._joyCenter = p;
+        // Offset center slightly above touch point so thumb doesn't block stick
+        const joyOffsetY = 40;
+        this._joyCenter = { x: p.x, y: Math.max(55, p.y - joyOffsetY) };
         this.joyBase.classList.remove('hidden');
-        this.joyBase.style.left = p.x + 'px';
-        this.joyBase.style.top = p.y + 'px';
+        this.joyBase.style.left = this._joyCenter.x + 'px';
+        this.joyBase.style.top = this._joyCenter.y + 'px';
         this.joyStick.style.transform = 'translate(-50%,-50%)';
       }
     } else if (this._burstId === null && e.pointerId !== this._joyId) {
       this._burstId = e.pointerId;
       this.h.onBurst(true);
+      this.setBurstVisual(true);
       if (!this._burstHintShown) {
         this._burstHintShown = true;
         if (this.h.onBurstHint) this.h.onBurstHint();
@@ -200,6 +214,14 @@ class InputManager {
     el.classList.add('show');
   }
 
+  setBurstVisual(active) {
+    const btn = document.getElementById('dpBurst');
+    if (btn) {
+      btn.classList.toggle('held', !!active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+
   bindDPad(container) {
     this._dpActiveId = null;
     this._dpLastDir = null;
@@ -213,6 +235,7 @@ class InputManager {
       try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
       if (this._dpBurstGesture) {
         this.h.onBurst(true);
+        this.setBurstVisual(true);
       } else {
         this._dpLastDir = btn.dataset.dir;
         this.h.onDir(btn.dataset.dir);
@@ -235,6 +258,7 @@ class InputManager {
       if (this._dpBurstGesture) {
         this._dpBurstGesture = false;
         this.h.onBurst(false);
+        this.setBurstVisual(false);
       }
     };
     container.addEventListener('pointerup', release);
@@ -243,5 +267,6 @@ class InputManager {
 }
 
 Object.assign(BS, { DIRS, InputManager });
+
 
 })(window.BS);

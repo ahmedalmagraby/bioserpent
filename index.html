@@ -6,8 +6,9 @@
 <meta name="theme-color" content="#0b1410">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=9">
-<link rel="stylesheet" href="css/animations.css?v=9">
+<link rel="stylesheet" href="css/main.css?v=11">
+<link rel="stylesheet" href="css/animations.css?v=11">
+
 </head>
 <body>
 <div id="app">
@@ -28,14 +29,15 @@
     <button id="btnPause" class="icon-btn" aria-label="Pause">❚❚</button>
   </header>
 
-  <div id="chipBar"></div>
+  <div id="chipBar" class="hidden"></div>
 
   <main id="stage">
     <canvas id="game" role="img" aria-label="BioSerpent game board"></canvas>
+    <div id="countdown" class="hidden"><span id="countdownNum">3</span></div>
     <div id="dpad" class="hidden">
       <button class="dp-btn dp-up" data-dir="up" aria-label="Steer up">▲</button>
       <button class="dp-btn dp-left" data-dir="left" aria-label="Steer left">◀</button>
-      <button class="dp-btn dp-burst" id="dpBurst" aria-label="Speed burst">⚡</button>
+      <button class="dp-btn dp-burst" id="dpBurst" aria-label="Speed burst" aria-pressed="false">⚡</button>
       <button class="dp-btn dp-right" data-dir="right" aria-label="Steer right">▶</button>
       <button class="dp-btn dp-down" data-dir="down" aria-label="Steer down">▼</button>
     </div>
@@ -47,10 +49,22 @@
     <h1 class="title">Bio<span>Serpent</span></h1>
     <p class="tagline">a biomimetic organic snake garden</p>
     <nav class="menu-buttons">
-      <button id="btnClassic" class="btn primary">🐍 Classic Run</button>
-      <button id="btnLevels" class="btn">🌿 Level Garden</button>
-      <button id="btnTimeAttack" class="btn">⏱ Time Attack</button>
-      <button id="btnZen" class="btn">🪷 Zen Flow</button>
+      <button id="btnClassic" class="btn primary mode-btn">
+        <span class="btn-title">🐍 Classic Run</span>
+        <span id="subClassic" class="btn-sub">Best: 0</span>
+      </button>
+      <button id="btnLevels" class="btn mode-btn">
+        <span class="btn-title">🌿 Level Garden</span>
+        <span id="subLevels" class="btn-sub">0 / 36 ★</span>
+      </button>
+      <button id="btnTimeAttack" class="btn mode-btn">
+        <span class="btn-title">⏱ Time Attack</span>
+        <span id="subTimeAttack" class="btn-sub">Best: 0</span>
+      </button>
+      <button id="btnZen" class="btn mode-btn">
+        <span class="btn-title">🪷 Zen Flow</span>
+        <span id="subZen" class="btn-sub">Best Length: 0</span>
+      </button>
       <div class="menu-row">
         <button id="btnSkins" class="btn small">🎨 Skins</button>
         <button id="btnBadges" class="btn small">🏅 Badges</button>
@@ -58,7 +72,7 @@
         <button id="btnSettings" class="btn small">⚙️ Settings</button>
       </div>
     </nav>
-    <div id="menuStats" class="menu-stats glass"></div>
+    <div id="menuStats" class="menu-stats glass" title="Click to view Badges"></div>
   </section>
 
   <section id="screen-levels" class="screen hidden">
@@ -85,10 +99,12 @@
   <section id="screen-pause" class="screen overlay hidden">
     <div class="panel glass pop-in">
       <h2>Paused</h2>
+      <div id="pauseSub" class="pause-sub"></div>
       <div id="pauseStats" class="pause-stats"></div>
       <div class="stack">
         <button id="btnResume" class="btn primary">▶ Resume</button>
         <button id="btnPauseRestart" class="btn">↻ Restart</button>
+        <button id="btnPauseGuide" class="btn">📖 Field Guide</button>
         <button id="btnPauseSettings" class="btn">⚙ Settings</button>
         <button id="btnPauseQuit" class="btn danger">✕ Quit to Menu</button>
       </div>
@@ -98,6 +114,7 @@
   <section id="screen-over" class="screen overlay hidden">
     <div class="panel glass pop-in">
       <h2 id="overTitle">Game Over</h2>
+      <div id="overMode" class="over-mode"></div>
       <div id="overStats" class="over-stats"></div>
       <div class="stack row">
         <button id="btnOverRestart" class="btn primary">↻ Play Again</button>
@@ -111,6 +128,7 @@
       <h2>Level Complete!</h2>
       <div id="starsBox" class="stars-box"></div>
       <div id="completeScore" class="complete-score"></div>
+      <div id="completeNextStar" class="complete-next-star"></div>
       <div class="stack row">
         <button id="btnNext" class="btn primary">Next Level →</button>
         <button id="btnReplay" class="btn">↻ Replay</button>
@@ -125,7 +143,7 @@
       <div class="guide-tabs">
         <button class="guide-tab active" data-tab="prey">🍎 Prey</button>
         <button class="guide-tab" data-tab="powers">🍄 Power-ups</button>
-        <button class="guide-tab" data-tab="hazards">🌍 Biomes</button>
+        <button class="guide-tab" data-tab="hazards">🚧 Hazards</button>
         <button class="guide-tab" data-tab="tips">🎮 Controls</button>
       </div>
       <div id="guideContent" class="guide-content">
@@ -161,12 +179,13 @@
         </select>
       </label>
       <label class="setting-row">
-        <span>🧱 Walls (Classic)</span>
+        <span>🧱 Walls mode</span>
         <select id="setWalls">
           <option value="solid">Solid — crash on walls</option>
           <option value="wrap">Wrap — slide through edges</option>
         </select>
       </label>
+      <p class="setting-sub-hint">Walls wrap mode only applies to Classic Run.</p>
       <p class="hint">Desktop: Arrows / WASD steer · hold Shift for speed burst · Space pauses · M mute</p>
       <div class="stack row">
         <button id="btnExportSave" class="btn small">⬆ Export save</button>
@@ -179,20 +198,35 @@
     </div>
   </div>
 
+  <div id="modal-save" class="modal hidden">
+    <div class="panel glass pop-in save-panel">
+      <h2 id="saveModalTitle">Save Data</h2>
+      <p id="saveModalSub" class="screen-sub">Backup, export, or restore your progress JSON</p>
+      <textarea id="saveJsonArea" class="save-textarea" rows="7" spellcheck="false" placeholder="Paste your save JSON here..."></textarea>
+      <div class="stack row">
+        <button id="btnSaveCopy" class="btn small">📋 Copy</button>
+        <button id="btnSaveDownload" class="btn small">💾 Download File</button>
+        <button id="btnSaveApplyImport" class="btn primary small">📥 Import & Restore</button>
+        <button id="btnCloseSaveModal" class="btn small">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=9"></script>
-<script src="js/engine/gameLoop.js?v=9"></script>
-<script src="js/engine/inputManager.js?v=9"></script>
-<script src="js/engine/particleSystem.js?v=9"></script>
-<script src="js/audio/soundManager.js?v=9"></script>
-<script src="js/entities/snake.js?v=9"></script>
-<script src="js/entities/food.js?v=9"></script>
-<script src="js/entities/powerups.js?v=9"></script>
-<script src="js/entities/obstacles.js?v=9"></script>
-<script src="js/levels/levelData.js?v=9"></script>
-<script src="js/ui/uiManager.js?v=9"></script>
-<script src="js/main.js?v=9"></script>
+<script src="js/engine/canvas.js?v=11"></script>
+<script src="js/engine/gameLoop.js?v=11"></script>
+<script src="js/engine/inputManager.js?v=11"></script>
+<script src="js/engine/particleSystem.js?v=11"></script>
+<script src="js/audio/soundManager.js?v=11"></script>
+<script src="js/entities/snake.js?v=11"></script>
+<script src="js/entities/food.js?v=11"></script>
+<script src="js/entities/powerups.js?v=11"></script>
+<script src="js/entities/obstacles.js?v=11"></script>
+<script src="js/levels/levelData.js?v=11"></script>
+<script src="js/ui/uiManager.js?v=11"></script>
+<script src="js/main.js?v=11"></script>
+
 <script>
 window.addEventListener('error', function (e) {
   var d = document.getElementById('__booterr');
