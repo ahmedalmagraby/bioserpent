@@ -106,6 +106,21 @@ class FoodManager {
     return true;
   }
 
+  // Serpent Egg: a rare, stationary risk/reward snack. Catch it quickly for a
+  // big payout — ignore it and it hatches into a golden berry.
+  trySpawnEgg(isFree, particles, view) {
+    if (this.items.some(i => i.type === 'egg')) return false;
+    const c = this.randomFree(isFree);
+    if (!c) return false;
+    this.items.push({ type: 'egg', gx: c.x, gy: c.y, age: 0, life: CONFIG.eggLifeMs, maxLife: CONFIG.eggLifeMs, hop: 0, pop: 0, wob: rand(0, TAU) });
+    if (particles && view) {
+      particles.burst(view.cx(c.x), view.cy(c.y), {
+        count: 10, colors: ['#f8f4e6', '#d9cba8', '#ffffff'], speed: 0.07, size: 2, life: 550
+      });
+    }
+    return true;
+  }
+
 
   magnetPull(head, canLand) {
     for (const it of this.items) {
@@ -140,6 +155,21 @@ class FoodManager {
             });
           }
           this.items.splice(i, 1);
+        }
+      } else if (it.type === 'egg') {
+        it.wob += dt * 0.004;
+        it.life -= dt;
+        if (it.life <= 0 && env.view) {
+          // Hatch into a golden berry with a fresh timer
+          const px = it.gx;
+          const py = it.gy;
+          this.items.splice(i, 1);
+          this.items.push({ type: 'golden', gx: px, gy: py, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
+          if (env.particles) {
+            env.particles.burst(env.view.cx(px), env.view.cy(py), {
+              count: 16, colors: ['#f8f4e6', '#ffd54a', '#fff59d'], speed: 0.12, size: 2.2, life: 650, type: 'spark'
+            });
+          }
         }
       }
     }
@@ -287,6 +317,43 @@ class FoodManager {
         ctx.beginPath();
         ctx.ellipse(x + cell * 0.17, y - cell * 0.42, cell * 0.13, cell * 0.06, -0.5, 0, TAU);
         ctx.fill();
+      } else if (it.type === 'egg') {
+        // Serpent Egg: cream shell, speckles, wobble intensifies near hatching
+        const urgency = 1 - it.life / (it.maxLife || 1);
+        const wob = Math.sin(time * (0.008 + urgency * 0.02) + it.wob) * (0.08 + urgency * 0.22);
+        ctx.translate(x, y);
+        ctx.rotate(wob);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(0, cell * 0.3 - (y - y), cell * 0.22, cell * 0.06, 0, 0, TAU);
+        ctx.fill();
+        const g = ctx.createRadialGradient(-cell * 0.07, -cell * 0.09, 1, 0, 0, cell * 0.34);
+        g.addColorStop(0, '#fffdf4');
+        g.addColorStop(0.7, '#f2e9cf');
+        g.addColorStop(1, '#d9cba8');
+        ctx.fillStyle = g;
+        ctx.strokeStyle = '#a89a72';
+        ctx.lineWidth = cell * 0.04;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, cell * 0.26, cell * 0.33, 0, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(140,120,80,0.55)';
+        for (const [sx, sy, sr] of [[-0.08, -0.12, 0.03], [0.09, -0.04, 0.025], [-0.05, 0.08, 0.028], [0.06, 0.14, 0.02]]) {
+          ctx.beginPath();
+          ctx.arc(sx * cell, sy * cell, sr * cell, 0, TAU);
+          ctx.fill();
+        }
+        if (urgency > 0.65) {
+          // Cracks appear as hatching nears
+          ctx.strokeStyle = '#8c7c52';
+          ctx.lineWidth = cell * 0.03;
+          ctx.beginPath();
+          ctx.moveTo(-cell * 0.16, -cell * 0.05);
+          ctx.lineTo(-cell * 0.05, 0);
+          ctx.lineTo(-cell * 0.12, cell * 0.08);
+          ctx.stroke();
+        }
       } else {
         const pulse = 0.85 + 0.15 * Math.sin(time * 0.007 + it.gx);
         const blink = it.life < 2600 ? (Math.sin(time * 0.025) > -0.3 ? 1 : 0.25) : 1;

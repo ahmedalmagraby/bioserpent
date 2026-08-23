@@ -16,6 +16,7 @@ function defaultSave() {
     stars: {},
     settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true },
     daily: { key: '', best: 0, streak: 0, lastPlayed: '' },
+    history: {},
     skin: 'emerald',
     seenHint: false,
     stats: { apples: 0, golden: 0, insects: 0, dragonflies: 0, powerups: 0, games: 0, maxLength: 0, topspeed: false, pacifist: false, combos: 0, nearMisses: 0, dailyPlayed: 0 },
@@ -42,6 +43,7 @@ function loadSave() {
   return {
     best: Object.assign(d.best, s.best),
     daily: Object.assign(d.daily, s.daily || {}),
+    history: s.history || {},
     levelBest: s.levelBest || {},
     stars: s.stars || {},
     settings: Object.assign(d.settings, s.settings),
@@ -713,6 +715,7 @@ class Game {
         apples: this.run.apples,
         time: Math.floor(this.run.time / 1000)
       }, this.getModeName());
+      this.ui.setPauseTip(PAUSE_TIPS[Math.floor(Math.random() * PAUSE_TIPS.length)]);
       this.ui.showScreen('pause');
     } else if (this.state === 'paused') {
       this.state = 'playing';
@@ -829,6 +832,27 @@ class Game {
     if (this.mode === 'timeattack') {
       this.taTime += kind === 'dragonfly' ? CONFIG.taDragonflyBonus : kind === 'beetle' ? CONFIG.taBeetleBonus : CONFIG.taFireflyBonus;
     }
+    this.checkBadges();
+    this.maybeNewBest();
+  }
+
+  consumeEgg() {
+    const gain = CONFIG.gainsEgg;
+    this.run.score += gain;
+    this.run.eggs = (this.run.eggs || 0) + 1;
+    this.snake.grow(dailyModActive('giant') ? 4 : 2);
+    this.snake.eatPulse();
+    // Egg bonus: brief magnet burst as a reward
+    this.effects.magnet = Math.max(this.effects.magnet, 3000);
+    const hx = this.view.cx(this.snake.head.x);
+    const hy = this.view.cy(this.snake.head.y);
+    this.particles.burst(hx, hy, {
+      count: 24, colors: ['#fffdf4', '#f2e9cf', '#ffd54a', '#ffffff'], speed: 0.16, size: 2.6, life: 750, type: 'spark'
+    });
+    if (this.save.settings.flash !== false) this.particles.flash('#f8f4e6', 0.09);
+    this.particles.popup(hx, hy - this.view.cell * 0.7, '+' + gain + ' 🥚', '#f2e9cf', 18);
+    this.sound.golden(this._pan);
+    buzz([14, 20, 14]);
     this.checkBadges();
     this.maybeNewBest();
   }
@@ -983,6 +1007,12 @@ class Game {
     }
     this.persist();
     if (this.mode === 'daily') this.recordDailyScore();
+    // Track recent scores per mode for the history sparkbars
+    if (!this.save.history) this.save.history = {};
+    const hkey = this.mode === 'level' ? 'level' + this.levelIdx : this.mode;
+    const h = this.save.history[hkey] || (this.save.history[hkey] = []);
+    h.push(this.run.score);
+    if (h.length > 10) h.shift();
     const rows = {
       title,
       modeName: this.getModeName(),
@@ -994,6 +1024,8 @@ class Game {
       golden: this.run.golden,
       insects: this.run.insects || 0,
       powerups: this.run.powerups || 0,
+      eggs: this.run.eggs || 0,
+      history: (this.save.history && this.save.history[hkey]) || [],
       newBest
     };
     if (!gentle) {
@@ -1067,7 +1099,10 @@ class Game {
       this.food.magnetPull(h, (x, y) => this.isMagnetSafe(x, y));
     }
     const item = this.food.collideCell(h.x, h.y);
-    if (item) this.consume(item.type === 'apple' ? 'apple' : 'golden');
+    if (item) {
+      if (item.type === 'egg') this.consumeEgg();
+      else this.consume(item.type === 'apple' ? 'apple' : 'golden');
+    }
     const ins = this.food.insectHit(this.view.cx(h.x), this.view.cy(h.y), this.view.cell);
     if (ins) this.consumeInsect(ins.kind);
     this._pan = (this.view.cx(h.x) / this.view.w) * 2 - 1;
@@ -1299,6 +1334,10 @@ class Game {
         }
       }
     }
+    // Rare Serpent Egg spawns (not in zen — keep the calm)
+    if (this.mode !== 'zen' && !this.food.items.some(i => i.type === 'egg') && Math.random() < dt * CONFIG.eggRatePerMs) {
+      this.food.trySpawnEgg((x, y) => this.isFreeCell(x, y), this.particles, this.view);
+    }
     if (this.powerups.field.length === 0 && Math.random() < dt * CONFIG.powerupRatePerMs) {
       this.powerups.spawn((x, y) => this.isFreeCell(x, y));
       if (this.powerups.field.length) {
@@ -1361,6 +1400,19 @@ class Game {
   drawBackground(ctx) {
     if (!this.bgCanvas) this.buildBg();
     ctx.drawImage(this.bgCanvas, 0, 0, this.view.w, this.view.h);
+    // Solid walls get a subtle glowing rail so the deadly boundary is readable
+    const wrapOn = this.mode === 'zen'
+      || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
+      || (this.mode === 'daily' && dailyModActive('wrap'));
+    if (!wrapOn && this.state !== 'menu') {
+      const v = this.view;
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 0.002);
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 107, 107, ${0.22 + pulse * 0.16})`;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1.5, 1.5, v.w - 3, v.h - 3);
+      ctx.restore();
+    }
   }
 
   render() {
@@ -1409,6 +1461,17 @@ class Game {
     this.particles.renderFlash(ctx, v.w, v.h);
   }
 }
+
+// Rotating tips shown on the pause screen
+const PAUSE_TIPS = [
+  '💡 Near misses pay: skim past rocks and brambles for +5.',
+  '🥚 Eggs hatch into golden berries — but catching them first pays more.',
+  '🔥 Chain food within 3.8s to stack up to a 5× combo.',
+  '✨ Every 10 growth spawns a guaranteed bonus berry.',
+  '⚡ Hold Shift (or the ⚡ button) for a burst of speed.',
+  '📅 The Daily Challenge changes every day — keep your streak alive!',
+  '🧲 Magnet Spores drag nearby fruit straight to your jaws.'
+];
 
 const canvas = document.getElementById('game');
 const stage = document.getElementById('stage');

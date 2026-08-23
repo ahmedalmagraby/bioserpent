@@ -437,10 +437,22 @@ class UIManager {
       `<span>✨</span><b>${d.golden || 0}</b>` +
       `<span>🪲</span><b>${d.insects || 0}</b>` +
       `<span>🍄</span><b>${d.powerups || 0}</b>` +
+      (d.eggs ? `<span>🥚</span><b>${d.eggs}</b>` : '') +
       `<span>📏</span><b>${d.length}</b>` +
-      `</div>`;
+      `</div>` +
+      (Array.isArray(d.history) && d.history.length > 1 ? this.historyBars(d.history) : '');
     this.el.overStats.innerHTML = rows;
     this.showScreen('over');
+  }
+
+  historyBars(history) {
+    const max = Math.max(...history, 1);
+    const bars = history.slice(-10).map((s, i, arr) => {
+      const isLast = i === arr.length - 1;
+      const h = Math.max(8, Math.round((s / max) * 44));
+      return `<i style="height:${h}px" class="${isLast ? 'last' : ''}" title="${s}"></i>`;
+    }).join('');
+    return `<div class="history-box"><small>Recent runs</small><div class="history-bars">${bars}</div></div>`;
   }
 
   showPauseStats(s, modeTitle = '') {
@@ -450,6 +462,13 @@ class UIManager {
       `<span class="stat"><b>${s.length}</b><small>Length</small></span>` +
       `<span class="stat"><b>${s.apples}</b><small>Apples</small></span>` +
       `<span class="stat"><b>${s.time}s</b><small>Time</small></span>`;
+    const tipEl = document.getElementById('pauseTip');
+    if (tipEl) tipEl.textContent = '';
+  }
+
+  setPauseTip(text) {
+    const tipEl = document.getElementById('pauseTip');
+    if (tipEl && text) tipEl.textContent = text;
   }
 
   levelComplete(d) {
@@ -553,6 +572,7 @@ class UIManager {
           <div class="guide-card"><div class="g-icon">🪰</div><div><b>Swift Dragonfly (+60 pts)</b><p>Fast, erratic diagonal flier. Evasive prey that flees when lunged at.</p></div></div>
           <div class="guide-card"><div class="g-icon">🪲</div><div><b>Ground Beetle (+40 pts)</b><p>Armored crawler patrolling the soil. Adds +1 length and bonus points.</p></div></div>
           <div class="guide-card"><div class="g-icon">💡</div><div><b>Biolume Firefly (+30 pts)</b><p>Gentle glowing nocturnal flyer drifting serenely through the biomes.</p></div></div>
+          <div class="guide-card"><div class="g-icon">🥚</div><div><b>Serpent Egg (+75 pts)</b><p>A rare treat! Swallow it before it hatches for big points and a magnet burst — dally and it becomes a golden berry.</p></div></div>
         </div>`;
     } else if (tab === 'powers') {
       c.innerHTML = `
