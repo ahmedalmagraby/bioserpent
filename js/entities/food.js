@@ -2,6 +2,8 @@ window.BS = window.BS || {};
 (function (BS) {
 "use strict";
 const { COLS, ROWS, TAU, rand, randi, pick, easeOutCubic, CONFIG } = BS;
+// Live board height (adaptive rows); falls back to the static default.
+const liveRows = () => (BS.view && BS.view.rows) || ROWS;
 
 const DIR8 = [
   { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
@@ -33,8 +35,9 @@ class FoodManager {
     const m = CONFIG.spawnMargin || 0;
     const x0 = Math.min(m, COLS - 1);
     const x1 = Math.max(x0, COLS - 1 - m);
-    const y0 = Math.min(m, ROWS - 1);
-    const y1 = Math.max(y0, ROWS - 1 - m);
+    const R = liveRows();
+    const y0 = Math.min(m, R - 1);
+    const y1 = Math.max(y0, R - 1 - m);
     for (let i = 0; i < 60; i++) {
       const x = randi(x0, x1);
       const y = randi(y0, y1);
@@ -44,7 +47,7 @@ class FoodManager {
     }
     for (let i = 0; i < 40; i++) {
       const x = randi(0, COLS - 1);
-      const y = randi(0, ROWS - 1);
+      const y = randi(0, R - 1);
       if (!isFree(x, y)) continue;
       if (this.occupied(x, y)) continue;
       return { x, y };
@@ -58,7 +61,7 @@ class FoodManager {
       }
     }
     if (!freeCells.length) {
-      for (let y = 0; y < ROWS; y++) {
+      for (let y = 0; y < R; y++) {
         for (let x = 0; x < COLS; x++) {
           if (isFree(x, y) && !this.occupied(x, y)) {
             freeCells.push({ x, y });
@@ -165,7 +168,7 @@ class FoodManager {
       for (const d of cands) {
         const nx = n.fx + d.x;
         const ny = n.fy + d.y;
-        if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+        if (nx < 0 || ny < 0 || nx >= COLS || ny >= liveRows()) continue;
         if (env.isFree && !env.isFree(nx, ny)) continue;
         if (this.occupied(nx, ny)) continue;
         if (fleeing) {

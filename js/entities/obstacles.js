@@ -26,7 +26,7 @@ class Obstacles {
   loadFromMap(rows) {
     this.clear();
     const pairs = {};
-    for (let y = 0; y < Math.min(rows.length, ROWS); y++) {
+    for (let y = 0; y < Math.min(rows.length, BS.view ? BS.view.rows : ROWS); y++) {
       const row = rows[y];
       for (let x = 0; x < COLS; x++) {
         const ch = row[x] || '.';
@@ -119,6 +119,23 @@ class Obstacles {
     if (!p) return null;
     const partner = this.portals.find(q => q.pair === p.pair && q !== p);
     return partner ? { x: partner.x, y: partner.y } : null;
+  }
+
+  // Distance (in cells) to the nearest hazard adjacent to (x, y), or null.
+  nearMissDistance(x, y) {
+    let best = null;
+    const consider = (hx, hy) => {
+      const d = Math.max(Math.abs(hx - x), Math.abs(hy - y));
+      if (d >= 1 && (best === null || d < best)) best = d;
+    };
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (this.blocked(nx, ny)) consider(nx, ny);
+      }
+    }
+    return best;
   }
 
   update(dt) {

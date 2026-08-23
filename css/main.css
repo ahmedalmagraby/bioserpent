@@ -405,6 +405,26 @@ body.dpad-open #stage {
 
 .over-stats { display: flex; flex-direction: column; gap: 6px; text-align: center; font-size: 15px; color: var(--ink-dim); }
 .over-stats b { color: var(--ink); font-size: 19px; }
+.mode-btn { position: relative; }
+.btn.daily {
+  border-color: rgba(255, 213, 74, 0.45);
+  background: linear-gradient(135deg, rgba(255, 213, 74, 0.14), rgba(255, 159, 67, 0.1));
+}
+.btn.daily .btn-sub { color: var(--gold); }
+.btn.daily::after {
+  content: 'NEW';
+  position: absolute;
+  top: -7px;
+  right: 10px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #1a1206;
+  background: var(--gold);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
 .over-grid {
   display: grid;
   grid-template-columns: auto auto;
@@ -827,6 +847,11 @@ body.dpad-open #stage {
   .card-grid { grid-template-columns: repeat(2, 1fr); }
   .guide-content { max-height: 44vh; }
   .setting-row input[type="range"] { width: min(46vw, 150px); }
+  /* Slimmer HUD on small screens: the adaptive board turns spare height into bigger cells */
+  #hud { padding-top: 6px; padding-bottom: 2px; gap: 6px; }
+  .hud-chip { padding: 2px 9px; }
+  #chipBar { min-height: 22px; }
+  .menu-buttons { gap: 8px; }
 }
 
 /* Landscape phones: keep HUD slim and move the d-pad to a thumb corner */

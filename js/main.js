@@ -1,7 +1,11 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { View, COLS, ROWS, clamp, rand, randi, TAU, mulberry32, GameLoop, InputManager, DIRS, Particles, SoundManager, Snake, SKINS, FoodManager, PowerUpManager, POWERUP_META, Obstacles, LEVELS, BIOMES, UIManager, CONFIG } = BS;
+const { View, COLS, ROWS, BASE_ROWS, clamp, rand, randi, TAU, mulberry32, GameLoop, InputManager, DIRS, Particles, SoundManager, Snake, SKINS, FoodManager, PowerUpManager, POWERUP_META, Obstacles, LEVELS, BIOMES, UIManager, CONFIG } = BS;
+
+// Live row count for the active game (adaptive board height). Use this instead
+// of the static ROWS constant anywhere the *current* playfield matters.
+const liveRows = () => (view ? view.rows : BASE_ROWS);
 
 const SAVE_KEY = 'bioSerpentSave_v1';
 
@@ -10,10 +14,11 @@ function defaultSave() {
     best: { classic: 0, timeattack: 0, zen: 0 },
     levelBest: {},
     stars: {},
-    settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid' },
+    settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true },
+    daily: { key: '', best: 0, streak: 0, lastPlayed: '' },
     skin: 'emerald',
     seenHint: false,
-    stats: { apples: 0, golden: 0, insects: 0, dragonflies: 0, powerups: 0, games: 0, maxLength: 0, topspeed: false, pacifist: false, combos: 0 },
+    stats: { apples: 0, golden: 0, insects: 0, dragonflies: 0, powerups: 0, games: 0, maxLength: 0, topspeed: false, pacifist: false, combos: 0, nearMisses: 0, dailyPlayed: 0 },
     badges: []
   };
 }
@@ -36,6 +41,7 @@ function loadSave() {
   const d = defaultSave();
   return {
     best: Object.assign(d.best, s.best),
+    daily: Object.assign(d.daily, s.daily || {}),
     levelBest: s.levelBest || {},
     stars: s.stars || {},
     settings: Object.assign(d.settings, s.settings),
@@ -55,8 +61,52 @@ const BADGES = [
   { id: 'pacifist', name: 'Pacifist', desc: 'Finish a level eating no prey', test: s => !!s.stats.pacifist },
   { id: 'dragonflyhunter', name: 'Dragonfly Ace', desc: 'Catch 5 swift dragonflies', test: s => (s.stats.dragonflies || 0) >= 5 },
   { id: 'combomaster', name: 'Combo Master', desc: 'Hit a 5× combo multiplier', test: s => (s.stats.combos || 0) >= 5 },
-  { id: 'aurora', name: 'Cosmic Traveler', desc: 'Earn 25 stars in Garden', test: s => Object.values(s.stars).reduce((a, b) => a + b, 0) >= 25 }
+  { id: 'aurora', name: 'Cosmic Traveler', desc: 'Earn 25 stars in Garden', test: s => Object.values(s.stars).reduce((a, b) => a + b, 0) >= 25 },
+  { id: 'daredevil', name: 'Daredevil', desc: 'Score 25 near misses', test: s => (s.stats.nearMisses || 0) >= 25 },
+  { id: 'dailydevotee', name: 'Daily Devotee', desc: 'Play the Daily Challenge 7 days', test: s => (s.stats.dailyPlayed || 0) >= 7 }
 ];
+
+// ---------- Daily Challenge ----------
+// Deterministic per calendar day: everyone gets the same modifiers + biome.
+const DAY_MS = 86400000;
+function dayKey(d = new Date()) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function epochDays(d = new Date()) {
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.floor(local.getTime() / DAY_MS);
+}
+function hashStr(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function dailyKeyToday() {
+  return 'daily-' + dayKey();
+}
+function dailySpec(key = dayKey()) {
+  const rng = mulberry32(hashStr(key));
+  // Pick exactly two distinct modifiers
+  const pool = DAILY_MODS.slice();
+  const mods = [];
+  for (let i = 0; i < 2 && pool.length; i++) {
+    mods.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  }
+  return { key, mods };
+}
+const DAILY_MODS = [
+  { id: 'haste', label: 'Hasty Hatchling', desc: 'Everything moves faster', stepMul: 0.78 },
+  { id: 'giant', label: 'Titan Serpent', desc: 'Each meal grows you double', growMul: 2 },
+  { id: 'wrap', label: 'Portal Edges', desc: 'Walls wrap around', wrap: true },
+  { id: 'ghosty', label: 'Ghost Garden', desc: 'Pass through your own tail', ghost: true },
+  { id: 'frenzy', label: 'Feeding Frenzy', desc: 'Prey is twice as plentiful', insectMul: 2 }
+];
+function dailyModActive(id) {
+  return !!(game.dailyMods && game.dailyMods.some(m => m.id === id));
+}
 
 const CAUSE_TITLE = {
   wall: 'Splat! Wall strike',
@@ -126,6 +176,7 @@ class Game {
     this.bgCanvas = null;
     this.countdownTimer = 0;
     this.countdownNum = 0;
+    this._nearMissCd = 0;
     this.regenDecor();
     this.resetDemo();
   }
@@ -134,6 +185,7 @@ class Game {
     if (this.mode === 'classic') return '🐍 Classic Run';
     if (this.mode === 'timeattack') return '⏱ Time Attack';
     if (this.mode === 'zen') return '🪷 Zen Flow';
+    if (this.mode === 'daily') return `📅 Daily Challenge · ${dayKey()}`;
     if (this.mode === 'level') {
       const lv = LEVELS[this.levelIdx];
       return `🌿 Level ${this.levelIdx + 1}: ${lv ? lv.name : ''}`;
@@ -155,7 +207,7 @@ class Game {
     const m = CONFIG.spawnMargin || 0;
     for (let i = 0; i < 100; i++) {
       const x = randi(m, COLS - 1 - m);
-      const y = randi(m, ROWS - 1 - m);
+      const y = randi(m, liveRows() - 1 - m);
       if (!this.demoFood.occupied(x, y) && Math.abs(this.demoSnake.head.x - x) + Math.abs(this.demoSnake.head.y - y) >= 4) {
         this.demoFood.items.push({ type: 'apple', gx: x, gy: y, age: 0, hop: 0 });
         return;
@@ -178,7 +230,8 @@ class Game {
       let bestScore = Infinity;
       for (const d of turns) {
         const nx = (s.head.x + d.x + COLS) % COLS;
-        const ny = (s.head.y + d.y + ROWS) % ROWS;
+        const R = liveRows();
+        const ny = (s.head.y + d.y + R) % R;
         if (s.cells.some((c, i) => i < s.cells.length - 1 && c.x === nx && c.y === ny)) continue;
         const dist = apple ? Math.abs(apple.gx - nx) + Math.abs(apple.gy - ny) : 0;
         const score = dist + (d === turns[0] ? -0.4 : 0) + Math.random() * 0.35;
@@ -188,7 +241,7 @@ class Game {
         }
       }
       if (bestDir) s.dir = bestDir;
-      const res = s.step({ wrap: true, cols: COLS, rows: ROWS, ghost: false });
+      const res = s.step({ wrap: true, cols: COLS, rows: liveRows(), ghost: false });
       if (res.death || !res) {
         this.resetDemo();
         break;
@@ -248,7 +301,7 @@ class Game {
 
 
   isPassableCell(x, y) {
-    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return false;
+    if (x < 0 || y < 0 || x >= COLS || y >= liveRows()) return false;
     if (this.obstacles.blocked(x, y)) return false;
     if (this.obstacles.portalAt(x, y)) return false;
     return true;
@@ -335,7 +388,7 @@ class Game {
     c.fillStyle = g;
     c.fillRect(0, 0, v.w, v.h);
     c.fillStyle = 'rgba(255,255,255,0.02)';
-    for (let y = 0; y < ROWS; y++) {
+    for (let y = 0; y < v.rows; y++) {
       for (let x = 0; x < COLS; x++) {
         if ((x + y) % 2 === 0) c.fillRect(x * v.cell, y * v.cell, v.cell, v.cell);
       }
@@ -446,10 +499,16 @@ class Game {
     if (this.mode === 'classic') return this.save.best.classic;
     if (this.mode === 'timeattack') return this.save.best.timeattack;
     if (this.mode === 'zen') return this.save.best.zen;
+    if (this.mode === 'daily') return this.save.daily.key === dailyKeyToday() ? this.save.daily.best : 0;
     return this.save.levelBest[this.levelIdx] || 0;
   }
 
   startRun(mode, levelIdx = -1) {
+    const wasDailyActive = this.mode === 'daily' && this.run &&
+      (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown');
+    if (wasDailyActive) {
+      this.recordDailyScore();
+    }
     if (this.mode === 'zen' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
       this.save.stats.games++;
       this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
@@ -466,7 +525,21 @@ class Game {
     this.mode = mode;
     this.levelIdx = levelIdx;
     const lv = mode === 'level' ? LEVELS[levelIdx] : null;
-    this.biomeKey = mode === 'level' ? lv.biome : mode === 'timeattack' ? 'oasis' : mode === 'zen' ? 'reef' : 'rainforest';
+    this.dailyMods = [];
+    let dailyStepMul = 1;
+    if (mode === 'daily') {
+      const spec = dailySpec();
+      this.dailyMods = spec.mods;
+      for (const m of spec.mods) {
+        if (m.stepMul) dailyStepMul *= m.stepMul;
+      }
+    }
+    const dk = { haste: '🏜️', giant: '🦣', wrap: '🌀', ghosty: '👻', frenzy: '🔥' };
+    // Campaign maps are authored on a fixed 20x20 grid — lock the board square.
+    this.view.forcedRows = mode === 'level' ? BASE_ROWS : null;
+    this.biomeKey = mode === 'level' ? lv.biome
+      : mode === 'daily' ? ['rainforest', 'oasis', 'cavern', 'reef'][epochDays() % 4]
+      : mode === 'timeattack' ? 'oasis' : mode === 'zen' ? 'reef' : 'rainforest';
     this.biome = BIOMES[this.biomeKey];
     this.regenDecor();
     this.obstacles.clear();
@@ -486,6 +559,15 @@ class Game {
     this.particles.clear();
     this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0 };
     this.stepMs = mode === 'level' ? lv.stepMs : CONFIG.stepMs[mode] || CONFIG.stepMs.classic;
+    if (this.mode === 'daily') {
+      this.stepMs = Math.round(this.stepMs * dailyStepMul);
+      const modsHtml = this.dailyMods.map(m => `${dk[m.id] || '•'} <b>${m.label}</b> — ${m.desc}`).join('<br>');
+      setTimeout(() => {
+        if (this.state === 'playing' || this.state === 'countdown') {
+          this.ui.toast(`📅 Today's twist:<br>${modsHtml}`, 'biome');
+        }
+      }, 1400);
+    }
     this.acc = 0;
     this.tInterp = 0;
     this.burst = false;
@@ -506,6 +588,9 @@ class Game {
       }
     }, 650);
     this.insectCfg = mode === 'level' ? lv.insects : mode === 'timeattack' ? { firefly: 1, beetle: 2, dragonfly: 1 } : mode === 'zen' ? { firefly: 1 } : { firefly: 1, beetle: 1, dragonfly: 1 };
+    if (mode === 'daily' && this.dailyMods.some(m => m.id === 'frenzy')) {
+      for (const k of Object.keys(this.insectCfg)) this.insectCfg[k] *= 2;
+    }
     for (const kind of Object.keys(this.insectCfg)) {
       for (let i = 0; i < this.insectCfg[kind]; i++) {
         const spawned = this.food.spawnInsect(kind, (x, y) => this.isFreeCell(x, y));
@@ -552,6 +637,9 @@ class Game {
 
   gotoMenu() {
     this.ui.hideCountdown();
+    if (this.mode === 'daily' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
+      this.recordDailyScore();
+    }
     if (this.mode === 'zen' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
       this.run.time = Math.max(this.run.time, 0);
       this.save.stats.games++;
@@ -589,11 +677,18 @@ class Game {
 
   refreshMenuStats() {
     const s = this.save.stats;
-    this.ui.updateMenuSubLabels(this.save.best, this.sumStars(), LEVELS.length * 3);
+    const today = dayKey();
+    const daily = {
+      best: this.save.daily.key === today ? this.save.daily.best : 0,
+      streak: this.save.daily.streak || 0,
+      playedToday: this.save.daily.key === today
+    };
+    this.ui.updateMenuSubLabels(this.save.best, this.sumStars(), LEVELS.length * 3, { daily });
     this.ui.setMenuStats(
       `🐍 Classic <b>${this.save.best.classic}</b><span>·</span>⏱ Attack <b>${this.save.best.timeattack}</b>` +
       `<span>·</span>🪷 Zen <b>${this.save.best.zen}</b><span>·</span>🍎 <b>${s.apples}</b>` +
-      `<span>·</span>⭐ <b>${this.sumStars()}/${LEVELS.length * 3}</b><span>·</span>🏅 <b>${this.save.badges.length}/${BADGES.length}</b>`
+      `<span>·</span>⭐ <b>${this.sumStars()}/${LEVELS.length * 3}</b><span>·</span>🏅 <b>${this.save.badges.length}/${BADGES.length}</b>` +
+      `<span>·</span>📅 <b>${daily.streak || 0}</b>🔥`
     );
   }
 
@@ -657,7 +752,7 @@ class Game {
     const base = kind === 'apple' ? CONFIG.gains.apple : CONFIG.gains.golden;
     const gain = Math.round(base * mult);
     this.run.score += gain;
-    this.snake.grow(kind === 'apple' ? 1 : 2);
+    this.snake.grow((kind === 'apple' ? 1 : 2) * (dailyModActive('giant') ? 2 : 1));
     this.snake.eatPulse();
     if (kind === 'apple') this.run.apples++; else this.run.golden++;
     this.run.foodEaten++;
@@ -677,7 +772,7 @@ class Game {
       buzz(12);
     } else {
       this.particles.burst(hx, hy, { count: 22, colors: ['#ffd54a', '#fff59d', '#ffffff'], speed: 0.17, size: 2.6, life: 750, type: 'spark' });
-      this.particles.flash('#ffd54a', 0.08);
+      if (this.save.settings.flash !== false) this.particles.flash('#ffd54a', 0.08);
       this.sound.golden(this._pan);
       buzz([16, 24, 16]);
     }
@@ -708,7 +803,7 @@ class Game {
     if (kind === 'dragonfly') {
       this.save.stats.dragonflies = (this.save.stats.dragonflies || 0) + 1;
     }
-    this.snake.grow(kind === 'dragonfly' ? 2 : 1);
+    this.snake.grow((kind === 'dragonfly' ? 2 : 1) * (dailyModActive('giant') ? 2 : 1));
     this.snake.eatPulse();
     const hx = this.view.cx(this.snake.head.x);
     const hy = this.view.cy(this.snake.head.y);
@@ -750,7 +845,7 @@ class Game {
       const hx = this.view.cx(this.snake.head.x);
       const hy = this.view.cy(this.snake.head.y);
       this.particles.popup(hx, hy - this.view.cell, 'NEW BEST!', '#ffd54a', 21);
-      this.particles.flash('#ffd54a', 0.1);
+      if (this.save.settings.flash !== false) this.particles.flash('#ffd54a', 0.1);
       this.sound.star(2);
     }
   }
@@ -762,7 +857,7 @@ class Game {
     this.bgGrad = null;
     this.sound.startMusic(this.biome.music);
     this.ui.toast(`🌍 Entering <b>${this.biome.name}</b>`, 'biome');
-    this.particles.flash('#ffffff', 0.1);
+    if (this.save.settings.flash !== false) this.particles.flash('#ffffff', 0.1);
   }
 
   activatePower(type) {
@@ -801,18 +896,72 @@ class Game {
     this.sound.death();
     this.sound.duck();
     buzz([60, 40, 90]);
-    this.particles.shake(7);
-    this.particles.flash('#ff5252', 0.3);
+    const causeFx = {
+      wall: { shake: 8, flash: '#8ea0b5', burst: ['#9fb4c8', '#dfeaf2'] },
+      self: { shake: 7, flash: '#ff8a80', burst: ['#ff8a80', '#ffcdd2'] },
+      rock: { shake: 10, flash: '#b0bec5', burst: ['#90a4ae', '#cfd8dc', '#ffffff'] },
+      bramble: { shake: 6, flash: '#69f0ae', burst: ['#69f0ae', '#3a6b4a', '#e05252'] },
+      spore: { shake: 7, flash: '#b388ff', burst: ['#b388ff', '#7c43bd', '#e1bee7'] },
+      time: { shake: 4, flash: '#ffd54a', burst: ['#ffd54a', '#fff59d'] }
+    };
+    const fx = causeFx[cause] || causeFx.wall;
+    if (this.save.settings.shake !== false) this.particles.shake(fx.shake);
+    if (this.save.settings.flash !== false) this.particles.flash(fx.flash, cause === 'rock' ? 0.34 : 0.28);
     const dsp2 = this.snake.sampleSpine(this.view, this.tInterp);
     for (const strand of dsp2.all) {
       for (let i = 0; i < strand.length; i += 3) {
         this.particles.burst(strand[i].px, strand[i].py, {
-          count: 6, colors: [this.snake.skin.c1, this.snake.skin.c2, '#ff8a80'],
+          count: 6, colors: [this.snake.skin.c1, this.snake.skin.c2, ...fx.burst],
           speed: 0.12, size: 2.4, life: 800, grav: 0.0004
         });
       }
     }
     this.finishRun(false, CAUSE_TITLE[cause] || 'Game Over', cause === 'time');
+  }
+
+  recordDailyScore() {
+    const today = dayKey();
+    const d = this.save.daily;
+    if (d.key !== today) {
+      // First run of a new day: extend streak only if yesterday was played
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      d.streak = d.lastPlayed === dayKey(y) ? (d.streak || 0) + 1 : 1;
+      d.key = today;
+      d.best = 0;
+    }
+    d.lastPlayed = today;
+    const score = this.run ? this.run.score : 0;
+    if (score > d.best) d.best = score;
+    if (!this._dailyCountedToday) {
+      this.save.stats.dailyPlayed = (this.save.stats.dailyPlayed || 0) + 1;
+      this._dailyCountedToday = true;
+    }
+    this.checkBadges();
+    this.persist();
+  }
+
+  shareResult() {
+    if (!this.run) return;
+    const mods = this.mode === 'daily' ? '\nModifiers: ' + this.dailyMods.map(m => m.label).join(' + ') : '';
+    const text = `🐍 BioSerpent — ${this.getModeName()}\n` +
+      `Score: ${this.run.score} · Length: ${this.snake.length} · Apples: ${this.run.apples}` +
+      `${this.run.nearMisses ? `\nNear misses: ${this.run.nearMisses}` : ''}${mods}` +
+      `\nCan you beat me?`;
+    const done = () => this.ui.toast('📋 Result copied to clipboard', 'hint');
+    const fail = () => this.ui.toast('⚠ Could not share result', 'warn');
+    const copyFallback = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fail);
+      } else {
+        fail();
+      }
+    };
+    if (navigator.share) {
+      navigator.share({ text }).then(() => this.ui.toast('📤 Result shared!', 'hint')).catch(copyFallback);
+    } else {
+      copyFallback();
+    }
   }
 
   finishRun(completed, title, gentle) {
@@ -826,11 +975,14 @@ class Game {
       if (this.run.score > s.best.timeattack) { s.best.timeattack = this.run.score; newBest = true; }
     } else if (this.mode === 'zen') {
       if (this.snake.length > s.best.zen) { s.best.zen = this.snake.length; newBest = true; }
+    } else if (this.mode === 'daily') {
+      if (this.run.score > (s.daily.best || 0)) { s.daily.best = this.run.score; newBest = true; }
     } else if (this.mode === 'level') {
       const prev = s.levelBest[this.levelIdx] || 0;
       if (this.run.score > prev) { s.levelBest[this.levelIdx] = this.run.score; newBest = true; }
     }
     this.persist();
+    if (this.mode === 'daily') this.recordDailyScore();
     const rows = {
       title,
       modeName: this.getModeName(),
@@ -840,6 +992,8 @@ class Game {
       length: this.snake.length,
       time: Math.floor(this.run.time / 1000),
       golden: this.run.golden,
+      insects: this.run.insects || 0,
+      powerups: this.run.powerups || 0,
       newBest
     };
     if (!gentle) {
@@ -886,10 +1040,12 @@ class Game {
 
   doStep() {
     const env = {
-      wrap: this.mode === 'zen' || (this.mode === 'classic' && this.save.settings.walls === 'wrap'),
+      wrap: this.mode === 'zen'
+        || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
+        || (this.mode === 'daily' && dailyModActive('wrap')),
       cols: COLS,
-      rows: ROWS,
-      ghost: this.effects.ghost > 0 || this.mode === 'zen',
+      rows: liveRows(),
+      ghost: this.effects.ghost > 0 || this.mode === 'zen' || (this.mode === 'daily' && dailyModActive('ghosty')),
       blocked: (x, y) => this.obstacles.blocked(x, y),
       portalAt: (x, y) => this.obstacles.portalAt(x, y)
     };
@@ -926,8 +1082,33 @@ class Game {
         const hy2 = this.view.cy(h.y);
         this.particles.popup(hx2, hy2 - this.view.cell, m + ' LONG!', '#7ee08a', 17);
         this.sound.star(1);
+        if (this.food.trySpawnGolden((x, y) => this.isFreeCell(x, y))) {
+          const g = this.food.items.find(i => i.type === 'golden');
+          if (g) {
+            this.particles.burst(this.view.cx(g.gx), this.view.cy(g.gy), {
+              count: 12, colors: ['#ffd54a', '#fff59d', '#ffffff'], speed: 0.09, size: 2, life: 600, type: 'spark'
+            });
+            this.particles.popup(this.view.cx(g.gx), this.view.cy(g.gy) - this.view.cell * 0.7, '✨ BONUS BERRY', '#ffd54a', 15);
+          }
+        }
       }
       this.lastLen = newLen;
+    }
+    // Near-miss: skim past a hazard without touching it for bonus points
+    if (this._nearMissCd > 0) this._nearMissCd -= CONFIG.hudThrottleMs;
+    if (this._nearMissCd <= 0) {
+      const nd = this.obstacles.nearMissDistance(h.x, h.y);
+      if (nd !== null && nd <= CONFIG.nearMissDist) {
+        this._nearMissCd = CONFIG.nearMissCooldownMs;
+        this.run.score += CONFIG.nearMissGain;
+        this.run.nearMisses = (this.run.nearMisses || 0) + 1;
+        this.save.stats.nearMisses = (this.save.stats.nearMisses || 0) + 1;
+        this.sound.nearMiss(this._pan);
+        const nx = this.view.cx(h.x);
+        const ny = this.view.cy(h.y);
+        this.particles.popup(nx, ny - this.view.cell * 0.9, '+' + CONFIG.nearMissGain + ' close!', '#48dbfb', 14);
+        this.particles.burst(nx, ny, { count: 6, colors: ['#48dbfb', '#ffffff'], speed: 0.1, size: 1.6, life: 350 });
+      }
     }
     if (!this.food.items.some(i => i.type === 'apple')) {
       this.food.spawnApple((x, y) => this.isFreeCell(x, y));
@@ -1164,7 +1345,7 @@ class Game {
         });
       }
     }
-    const burstI = this.burst ? 1 : 0;
+    const burstI = (this.burst || this.combo >= CONFIG.comboMax) ? 1 : 0;
     if (burstI !== this._lastBurstI) {
       this._lastBurstI = burstI;
       this.sound.setIntensity(burstI);
@@ -1219,7 +1400,8 @@ class Game {
         ghost: this.effects.ghost > 0,
         lookX, lookY,
         alpha: this.dissolving ? this.deathFade : 1,
-        magnet: this.effects.magnet > 0
+        magnet: this.effects.magnet > 0,
+        combo: this.combo
       });
     }
     this.particles.render(ctx);
@@ -1253,6 +1435,8 @@ const ui = new UIManager({
   },
   onTimeAttack() { game.startRun('timeattack'); },
   onZen() { game.startRun('zen'); },
+  onDaily() { game.startRun('daily'); },
+  onShareResult() { game.shareResult(); },
   onSkins() {
     ui.buildSkins(id => game.isSkinUnlocked(id), game.save.skin, game.save);
     ui.showScreen('skins');
@@ -1346,6 +1530,7 @@ const ui = new UIManager({
       const d = defaultSave();
       game.save = {
         best: Object.assign(d.best, obj.best),
+        daily: Object.assign(d.daily, obj.daily || {}),
         levelBest: obj.levelBest || {},
         stars: obj.stars || {},
         settings: Object.assign(d.settings, obj.settings),

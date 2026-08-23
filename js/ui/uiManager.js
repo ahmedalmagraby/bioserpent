@@ -38,6 +38,7 @@ class UIManager {
       subLevels: this.$('subLevels'),
       subTimeAttack: this.$('subTimeAttack'),
       subZen: this.$('subZen'),
+      subDaily: this.$('subDaily'),
       modalSave: this.$('modal-save'),
       saveJsonArea: this.$('saveJsonArea'),
       saveModalTitle: this.$('saveModalTitle'),
@@ -58,6 +59,7 @@ class UIManager {
     this._wire(this.$('btnLevels'), () => this.h.onLevels());
     this._wire(this.$('btnTimeAttack'), () => this.h.onTimeAttack());
     this._wire(this.$('btnZen'), () => this.h.onZen());
+    this._wire(this.$('btnDaily'), () => this.h.onDaily());
     this._wire(this.$('btnSkins'), () => this.h.onSkins());
     this._wire(this.$('btnBadges'), () => this.h.onOpenBadges());
     this._wire(this.$('btnSettings'), () => this.h.onOpenSettings());
@@ -71,6 +73,7 @@ class UIManager {
     this._wire(this.$('btnPauseSettings'), () => this.h.onOpenSettings());
     this._wire(this.$('btnPauseQuit'), () => this.h.onQuit());
     this._wire(this.$('btnOverRestart'), () => this.h.onRestart());
+    this._wire(this.$('btnOverShare'), () => this.h.onShareResult());
     this._wire(this.$('btnOverMenu'), () => this.h.onQuit());
     this._wire(this.$('btnNext'), () => this.h.onNextLevel());
     this._wire(this.$('btnReplay'), () => this.h.onRestart());
@@ -133,7 +136,9 @@ class UIManager {
       sfx: this.$('setSfx'),
       mute: this.$('setMute'),
       touch: this.$('setTouch'),
-      walls: this.$('setWalls')
+      walls: this.$('setWalls'),
+      shake: this.$('setShake'),
+      flash: this.$('setFlash')
     };
     s.music.addEventListener('input', () => {
       this.h.onSettingsChange({ music: s.music.value / 100 });
@@ -146,6 +151,8 @@ class UIManager {
     s.mute.addEventListener('change', () => this.h.onSettingsChange({ muted: s.mute.checked }));
     s.touch.addEventListener('change', () => this.h.onSettingsChange({ touch: s.touch.value }));
     s.walls.addEventListener('change', () => this.h.onSettingsChange({ walls: s.walls.value }));
+    if (s.shake) s.shake.addEventListener('change', () => this.h.onSettingsChange({ shake: s.shake.checked }));
+    if (s.flash) s.flash.addEventListener('change', () => this.h.onSettingsChange({ flash: s.flash.checked }));
   }
 
 
@@ -331,6 +338,8 @@ class UIManager {
         else if (b.id === 'dragonflyhunter') { cur = save.stats.dragonflies || 0; max = 5; }
         else if (b.id === 'combomaster') { cur = save.stats.combos || 0; max = 5; }
         else if (b.id === 'aurora') { cur = Object.values(save.stars || {}).reduce((a, c) => a + c, 0); max = 25; }
+        else if (b.id === 'daredevil') { cur = save.stats.nearMisses || 0; max = 25; }
+        else if (b.id === 'dailydevotee') { cur = save.stats.dailyPlayed || 0; max = 7; }
         if (max > 0) {
           const frac = Math.min(1, cur / max);
           progHtml = `<div class="prog-track"><div class="prog-fill" style="width:${Math.round(frac * 100)}%"></div></div><div class="sk-hint" style="color:var(--accent);margin-top:2px;">Progress: ${cur} / ${max}</div>`;
@@ -385,13 +394,23 @@ class UIManager {
     this.$('setMute').checked = s.muted;
     this.$('setTouch').value = s.touch;
     this.$('setWalls').value = s.walls || 'solid';
+    const shakeEl = this.$('setShake');
+    if (shakeEl) shakeEl.checked = s.shake !== false;
+    const flashEl = this.$('setFlash');
+    if (flashEl) flashEl.checked = s.flash !== false;
   }
 
-  updateMenuSubLabels(bests, starsSum, totalStars = 36) {
+  updateMenuSubLabels(bests, starsSum, totalStars = 36, extra = null) {
     if (this.el.subClassic) this.el.subClassic.textContent = `Best: ${bests.classic || 0}`;
     if (this.el.subLevels) this.el.subLevels.textContent = `${starsSum || 0} / ${totalStars} ★`;
     if (this.el.subTimeAttack) this.el.subTimeAttack.textContent = `Best: ${bests.timeattack || 0}`;
     if (this.el.subZen) this.el.subZen.textContent = `Best Length: ${bests.zen || 0}`;
+    if (this.el.subDaily && extra && extra.daily) {
+      const parts = [`Today's Best: ${extra.daily.best || 0}`];
+      if (extra.daily.streak > 1) parts.push(`🔥 ${extra.daily.streak}-day streak`);
+      else if (!extra.daily.playedToday) parts.push('New challenge!');
+      this.el.subDaily.textContent = parts.join(' · ');
+    }
   }
 
   showCountdown(num) {
@@ -416,6 +435,8 @@ class UIManager {
       `<span>⏱</span><b>${d.time || 0}s</b>` +
       `<span>🍎</span><b>${d.apples}</b>` +
       `<span>✨</span><b>${d.golden || 0}</b>` +
+      `<span>🪲</span><b>${d.insects || 0}</b>` +
+      `<span>🍄</span><b>${d.powerups || 0}</b>` +
       `<span>📏</span><b>${d.length}</b>` +
       `</div>`;
     this.el.overStats.innerHTML = rows;
@@ -553,10 +574,13 @@ class UIManager {
     } else {
       c.innerHTML = `
         <div class="guide-grid">
-          <div class="guide-card"><div class="g-icon">🔥</div><div><b>Combo System</b><p>Consume food within 3.8s to stack combo streaks from 2× up to 5× points!</p></div></div>
+          <div class="guide-card"><div class="g-icon">🔥</div><div><b>Combo System</b><p>Consume food within 3.8s to stack combo streaks from 2× up to 5× points! At high combos your serpent glows — and the music heats up.</p></div></div>
           <div class="guide-card"><div class="g-icon">⚡</div><div><b>Speed Burst</b><p>Hold <b>Shift</b> on keyboard or <b>⚡</b> on touch to charge forward with a particle tail.</p></div></div>
+          <div class="guide-card"><div class="g-icon">💨</div><div><b>Near Miss Bonus</b><p>Skim past rocks, brambles, or spores without touching them to earn +5 style points. Risk pays!</p></div></div>
+          <div class="guide-card"><div class="g-icon">✨</div><div><b>Milestone Berries</b><p>Every 10 segments of growth conjures a guaranteed golden berry somewhere in the garden.</p></div></div>
           <div class="guide-card"><div class="g-icon">🔄</div><div><b>Wall Wrap Option</b><p>Toggle walls between Solid and Wrap mode in Settings to loop across edges.</p></div></div>
           <div class="guide-card"><div class="g-icon">🪷</div><div><b>Zen Flow Mode</b><p>Infinite peaceful garden flow with tail ghosting and zero wall death.</p></div></div>
+          <div class="guide-card"><div class="g-icon">📅</div><div><b>Daily Challenge</b><p>One shared challenge per day with two random modifiers and a rotating biome. Build a streak by playing every day!</p></div></div>
         </div>`;
     }
   }

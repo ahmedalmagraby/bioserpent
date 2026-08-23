@@ -14,8 +14,19 @@ if (window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.round
   };
 }
 const COLS = 20;
-const ROWS = 20;
+const BASE_ROWS = 20;          // default board height in cells
+const ROWS_MIN = 14;
+const ROWS_MAX = 30;
 const TAU = Math.PI * 2;
+
+// Adaptive board height: keep cells big by growing/shrinking ROW count to the
+// viewport aspect. Campaign levels are always square (their maps are authored
+// on a fixed 20x20 grid).
+function rowsFor(availW, availH, forced) {
+  if (forced) return forced;
+  const idealRows = availW > 0 ? Math.round((availH / availW) * COLS) : BASE_ROWS;
+  return clamp(idealRows, ROWS_MIN, ROWS_MAX);
+}
 
 const CONFIG = {
   stepMs: { classic: 145, timeattack: 125, zen: 165, demo: 135 },
@@ -42,6 +53,9 @@ const CONFIG = {
   goldenRatePerMs: 0.00009,
   powerupRatePerMs: 0.00007,
   insectRespawnMs: 2600,
+  nearMissGain: 5,
+  nearMissDist: 1.6,
+  nearMissCooldownMs: 900,
   spawnMargin: 1,
   maxStepCatchup: 4,
   hudThrottleMs: 110,
@@ -117,9 +131,10 @@ class View {
     const padB = parseFloat(cs.paddingBottom) || 0;
     const availW = Math.max(120, r.width - padL - padR);
     const availH = Math.max(120, r.height - padT - padB);
-    this.cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / ROWS)));
+    this.rows = rowsFor(availW, availH, this.forcedRows);
+    this.cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / this.rows)));
     this.w = this.cell * COLS;
-    this.h = this.cell * ROWS;
+    this.h = this.cell * this.rows;
     this.dpr = Math.min(window.devicePixelRatio || 1, CONFIG.dprMax);
     this.canvas.style.width = this.w + 'px';
     this.canvas.style.height = this.h + 'px';
@@ -133,6 +148,6 @@ class View {
 }
 
 
-Object.assign(BS, { COLS, ROWS, TAU, CONFIG, REDUCED_MOTION, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View });
+Object.assign(BS, { COLS, ROWS: BASE_ROWS, BASE_ROWS, ROWS_MIN, ROWS_MAX, TAU, CONFIG, REDUCED_MOTION, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View });
 
 })(window.BS);

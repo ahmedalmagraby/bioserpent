@@ -55,6 +55,8 @@ const SKINS = [
 ];
 
 const SAMPLE = 0.3;
+// Mirrors BS.CONFIG.comboMax (kept local to avoid a load-order dependency)
+const COMBO_MAX = 5;
 
 function ss(a, b, x) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -353,6 +355,25 @@ class Snake {
         ctx.beginPath();
         ctx.arc(hx, hy, cell * (1.02 + 0.09 * Math.sin(time * 0.006)), 0, TAU);
         ctx.stroke();
+        ctx.restore();
+      }
+      if (state.combo >= 2) {
+        // Combo heat aura: ring intensity scales with the multiplier
+        const ck = clamp((state.combo - 1) / (COMBO_MAX - 1), 0, 1);
+        const pulse = 0.5 + 0.5 * Math.sin(time * (0.006 + ck * 0.008));
+        ctx.save();
+        ctx.globalAlpha = baseA * (0.16 + ck * 0.3) * (0.65 + 0.35 * pulse);
+        ctx.strokeStyle = state.combo >= 4 ? '#ff69b4' : '#ffd54a';
+        ctx.lineWidth = cell * (0.07 + ck * 0.06);
+        ctx.beginPath();
+        ctx.arc(hx, hy, cell * (0.86 + 0.12 * pulse + ck * 0.14), 0, TAU);
+        ctx.stroke();
+        if (ck >= 1) {
+          ctx.globalAlpha = baseA * (0.2 + 0.2 * pulse);
+          ctx.beginPath();
+          ctx.arc(hx, hy, cell * (1.24 + 0.1 * pulse), 0, TAU);
+          ctx.stroke();
+        }
         ctx.restore();
       }
       ctx.restore();

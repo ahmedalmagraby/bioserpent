@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0b1410">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=11">
-<link rel="stylesheet" href="css/animations.css?v=11">
+<link rel="stylesheet" href="css/main.css?v=14">
+<link rel="stylesheet" href="css/animations.css?v=14">
 
 </head>
 <body>
@@ -65,6 +65,10 @@
         <span class="btn-title">🪷 Zen Flow</span>
         <span id="subZen" class="btn-sub">Best Length: 0</span>
       </button>
+      <button id="btnDaily" class="btn mode-btn daily">
+        <span class="btn-title">📅 Daily Challenge</span>
+        <span id="subDaily" class="btn-sub"></span>
+      </button>
       <div class="menu-row">
         <button id="btnSkins" class="btn small">🎨 Skins</button>
         <button id="btnBadges" class="btn small">🏅 Badges</button>
@@ -118,6 +122,7 @@
       <div id="overStats" class="over-stats"></div>
       <div class="stack row">
         <button id="btnOverRestart" class="btn primary">↻ Play Again</button>
+        <button id="btnOverShare" class="btn">📋 Share Result</button>
         <button id="btnOverMenu" class="btn">☰ Menu</button>
       </div>
     </div>
@@ -185,6 +190,14 @@
           <option value="wrap">Wrap — slide through edges</option>
         </select>
       </label>
+      <label class="setting-row check">
+        <input type="checkbox" id="setShake">
+        <span>📳 Screen shake</span>
+      </label>
+      <label class="setting-row check">
+        <input type="checkbox" id="setFlash">
+        <span>💡 Flash effects</span>
+      </label>
       <p class="setting-sub-hint">Walls wrap mode only applies to Classic Run.</p>
       <p class="hint">Desktop: Arrows / WASD steer · hold Shift for speed burst · Space pauses · M mute</p>
       <div class="stack row">
@@ -214,18 +227,18 @@
 
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=11"></script>
-<script src="js/engine/gameLoop.js?v=11"></script>
-<script src="js/engine/inputManager.js?v=11"></script>
-<script src="js/engine/particleSystem.js?v=11"></script>
-<script src="js/audio/soundManager.js?v=11"></script>
-<script src="js/entities/snake.js?v=11"></script>
-<script src="js/entities/food.js?v=11"></script>
-<script src="js/entities/powerups.js?v=11"></script>
-<script src="js/entities/obstacles.js?v=11"></script>
-<script src="js/levels/levelData.js?v=11"></script>
-<script src="js/ui/uiManager.js?v=11"></script>
-<script src="js/main.js?v=11"></script>
+<script src="js/engine/canvas.js?v=14"></script>
+<script src="js/engine/gameLoop.js?v=14"></script>
+<script src="js/engine/inputManager.js?v=14"></script>
+<script src="js/engine/particleSystem.js?v=14"></script>
+<script src="js/audio/soundManager.js?v=14"></script>
+<script src="js/entities/snake.js?v=14"></script>
+<script src="js/entities/food.js?v=14"></script>
+<script src="js/entities/powerups.js?v=14"></script>
+<script src="js/entities/obstacles.js?v=14"></script>
+<script src="js/levels/levelData.js?v=14"></script>
+<script src="js/ui/uiManager.js?v=14"></script>
+<script src="js/main.js?v=14"></script>
 
 <script>
 window.addEventListener('error', function (e) {
