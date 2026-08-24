@@ -1689,6 +1689,9 @@ const input = new InputManager(stage, {
   },
   onBurst(active) {
     game.burst = active && game.state === 'playing';
+  },
+  onGamepad(connected) {
+    ui.toast(connected ? '🎮 Gamepad connected' : '🎮 Gamepad disconnected', 'hint');
   }
 });
 
@@ -1698,7 +1701,10 @@ input.bindDPad(document.getElementById('dpad'));
 game.applySettings();
 game.refreshMenuStats();
 
-const loop = new GameLoop(dt => game.update(dt), () => game.render());
+const loop = new GameLoop(dt => {
+  input.pollGamepad();
+  game.update(dt);
+}, () => game.render());
 loop.start();
 
 let _rzT = null;

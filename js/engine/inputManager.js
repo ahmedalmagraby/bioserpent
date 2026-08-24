@@ -17,6 +17,11 @@ const KEY_DIR = {
   ArrowRight: 'right', KeyD: 'right'
 };
 
+// Gamepad mapping (standard layout):
+//   D-pad / left stick → steer
+//   A / B / RB / RT    → speed burst (hold)
+//   Start (+)          → pause / resume
+//   A on menus         → confirm / start
 class InputManager {
   constructor(stage, handlers) {
     this.stage = stage;
@@ -35,8 +40,26 @@ class InputManager {
     this._pd = e => this.onPointerDown(e);
     this._pm = e => this.onPointerMove(e);
     this._pu = e => this.onPointerUp(e);
-    this._blur = () => this.h.onBurst(false);
+    this._blur = () => { this.h.onBurst(false); this.resetPad(); };
     this._ctx = e => e.preventDefault();
+    // --- Gamepad state ---
+    this.padIndex = null;        // gamepad index claimed as the active pad
+    this._padDir = null;         // last direction sent (edge-trigger)
+    this._padBurst = false;      // burst currently held via pad
+    this._padStart = false;      // Start button edge state
+    this._padA = false;          // A button edge state (confirm)
+    this.STICK_THRESHOLD = 0.55;
+  }
+
+  resetPad() {
+    if (this._padDir) { this._padDir = null; }
+    if (this._padBurst) {
+      this._padBurst = false;
+      this.h.onBurst(false);
+      this.setBurstVisual(false);
+    }
+    this._padStart = false;
+    this._padA = false;
   }
 
   get isTouch() {
@@ -58,6 +81,10 @@ class InputManager {
     window.addEventListener('keydown', this._kd);
     window.addEventListener('keyup', this._ku);
     window.addEventListener('blur', this._blur);
+    this._gc = e => this.onGamepadConnected(e);
+    this._gd = e => this.onGamepadDisconnected(e);
+    window.addEventListener('gamepadconnected', this._gc);
+    window.addEventListener('gamepaddisconnected', this._gd);
     this.stage.addEventListener('pointerdown', this._pd);
     this.stage.addEventListener('pointermove', this._pm);
     this.stage.addEventListener('pointerup', this._pu);
@@ -69,11 +96,99 @@ class InputManager {
     window.removeEventListener('keydown', this._kd);
     window.removeEventListener('keyup', this._ku);
     window.removeEventListener('blur', this._blur);
+    window.removeEventListener('gamepadconnected', this._gc);
+    window.removeEventListener('gamepaddisconnected', this._gd);
     this.stage.removeEventListener('pointerdown', this._pd);
     this.stage.removeEventListener('pointermove', this._pm);
     this.stage.removeEventListener('pointerup', this._pu);
     this.stage.removeEventListener('pointercancel', this._pu);
     this.stage.removeEventListener('contextmenu', this._ctx);
+  }
+
+  // ---- Gamepad ----
+  // Polled every frame by the game loop (navigator.getGamepads is poll-only).
+  // First pad to press a button becomes the active pad; only that one drives input.
+  onGamepadConnected(e) {
+    if (this.padIndex === null) {
+      this.padIndex = e.gamepad.index;
+      if (this.h.onGamepad) this.h.onGamepad(true);
+    }
+  }
+
+  onGamepadDisconnected(e) {
+    if (e.gamepad.index === this.padIndex) {
+      this.padIndex = null;
+      this.resetPad();
+      if (this.h.onGamepad) this.h.onGamepad(false);
+    }
+  }
+
+  getActivePad() {
+    if (typeof navigator.getGamepads !== 'function') return null;
+    const pads = navigator.getGamepads();
+    if (this.padIndex !== null) return pads[this.padIndex] || null;
+    // No pad claimed yet: claim the first one with any active input so a
+    // freshly-plugged controller works even before 'gamepadconnected'.
+    for (const p of pads) {
+      if (!p || !p.connected) continue;
+      const pressed = p.buttons.some(b => b && b.pressed);
+      const moved = p.axes.some(a => Math.abs(a) > this.STICK_THRESHOLD);
+      if (pressed || moved) {
+        this.padIndex = p.index;
+        if (this.h.onGamepad) this.h.onGamepad(true);
+        return p;
+      }
+    }
+    return null;
+  }
+
+  pollGamepad() {
+    const pad = this.getActivePad();
+    if (!pad) return;
+    const bt = i => !!(pad.buttons[i] && pad.buttons[i].pressed);
+
+    // --- Steer: D-pad buttons (12-15) or left stick (axes 0/1)
+    let dir = null;
+    if (bt(12)) dir = 'up';
+    else if (bt(13)) dir = 'down';
+    else if (bt(14)) dir = 'left';
+    else if (bt(15)) dir = 'right';
+    else {
+      const ax = pad.axes[0] || 0;
+      const ay = pad.axes[1] || 0;
+      if (Math.abs(ax) > this.STICK_THRESHOLD || Math.abs(ay) > this.STICK_THRESHOLD) {
+        dir = Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 'right' : 'left') : (ay > 0 ? 'down' : 'up');
+      }
+    }
+    if (dir && dir !== this._padDir) {
+      this._padDir = dir;
+      this.h.onDir(dir);
+    } else if (!dir) {
+      this._padDir = null;
+    }
+
+    // --- Burst: A(0) / B(1) / RB(5) / RT(7), hold-to-burst
+    const burstNow = bt(0) || bt(1) || bt(5) || bt(7);
+    if (burstNow !== this._padBurst) {
+      this._padBurst = burstNow;
+      this.h.onBurst(burstNow);
+      this.setBurstVisual(burstNow);
+    }
+
+    // --- Start(9): pause/resume, edge-triggered
+    const startNow = bt(9);
+    if (startNow && !this._padStart) {
+      this.h.onPause();
+    }
+    this._padStart = startNow;
+
+    // --- A(0) when NOT bursting-only context: confirm / restart, edge-triggered.
+    // Safe during play too — the handler ignores presses while playing.
+    const aNow = bt(0);
+    if (aNow && !this._padA && this.h.onConfirm) {
+      this.h.onConfirm();
+    }
+    this._padA = aNow;
   }
 
   onKeyDown(e) {

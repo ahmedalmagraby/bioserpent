@@ -28,13 +28,15 @@
 
 ## 🎮 Controls
 
-| Action | Keyboard | Touch / Mobile |
-|---|---|---|
-| **Steer** | Arrow Keys / `W`, `A`, `S`, `D` | Swipe / Floating Joystick / On-screen D-Pad |
-| **Speed Burst** | Hold `Shift` | Hold Burst Button (`⚡`) / Second Finger |
-| **Pause / Resume** | `Space` / `P` / `Escape` | HUD Pause Button (`❚❚`) |
-| **Quick Restart** | `R` (on game over / pause) | Restart Button (`↻`) |
-| **Toggle Mute** | `M` | Settings Modal Toggle |
+| Action | Keyboard | Touch / Mobile | Gamepad |
+|---|---|---|---|
+| **Steer** | Arrow Keys / `W`, `A`, `S`, `D` | Swipe / Floating Joystick / On-screen D-Pad | D-Pad / Left Stick |
+| **Speed Burst** | Hold `Shift` | Hold Burst Button (`⚡`) / Second Finger | Hold `A` / `B` / `RB` / `RT` |
+| **Pause / Resume** | `Space` / `P` / `Escape` | HUD Pause Button (`❚❚`) | `Start` (+) |
+| **Quick Restart** | `R` (on game over / pause) | Restart Button (`↻`) | `A` (on game over) |
+| **Toggle Mute** | `M` | Settings Modal Toggle | — |
+
+*Gamepad: any standard-layout controller (Xbox, PlayStation, etc.) — plug in and press a button to connect. The first active pad drives the game.*
 
 ---
 
