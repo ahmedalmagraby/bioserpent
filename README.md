@@ -27,6 +27,8 @@
   - The attract-mode serpent on the menu plays itself with BFS pathfinding + flood-fill survival checks.
 - **Quality of Life**:
   - Auto-pause on tab/window blur, gamepad support, PWA offline play, adaptive mobile board.
+- **Performance**:
+  - Per-biome background caching (LRU of 4 baked canvases) — biome switches and resizes swap a cached canvas instead of repainting; checkerboard grid drawn as a single pattern tile.
 
 ---
 
@@ -72,7 +74,7 @@ Then navigate to `http://localhost:8080` in your web browser.
 
 ### Editing files
 
-There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=8`) so browsers pick up the new version.
+There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=20`, matching the service worker's `bioserpent-v20` cache) so browsers pick up the new version.
 
 ---
 

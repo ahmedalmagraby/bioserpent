@@ -158,8 +158,6 @@ class Game {
     this.hudTimer = 0;
     this.trailAcc = 0;
     this.decor = [];
-    this.vignette = null;
-    this.bgGrad = null;
     this.demoSnake = new Snake();
     this.demoFood = new FoodManager();
     this.demoAcc = 0;
@@ -178,6 +176,8 @@ class Game {
     this._urgent = false;
     this._lastBurstI = 0;
     this.bgCanvas = null;
+    this.bgKey = '';
+    this.bgCache = new Map();   // baked backgrounds keyed per biome + size
     this.countdownTimer = 0;
     this.countdownNum = 0;
     this._nearMissCd = 0;
@@ -452,15 +452,22 @@ class Game {
       }
     }
     this.decor = d;
-    this.buildBg();
+    this.bgKey = '';   // invalidate — next drawBackground blit rebuilds lazily
   }
 
   buildBg() {
     const v = this.view;
-    if (!this.bgCanvas) this.bgCanvas = document.createElement('canvas');
-    this.bgCanvas.width = Math.round(v.w * v.dpr);
-    this.bgCanvas.height = Math.round(v.h * v.dpr);
-    const c = this.bgCanvas.getContext('2d');
+    const want = this.biomeKey + '|' + v.cell + '|' + v.dpr + '|' + v.rows;
+    let cv = this.bgCache.get(want);
+    if (cv) {
+      this.bgCanvas = cv;
+      this.bgKey = want;
+      return;
+    }
+    cv = document.createElement('canvas');
+    cv.width = Math.round(v.w * v.dpr);
+    cv.height = Math.round(v.h * v.dpr);
+    const c = cv.getContext('2d');
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     const g = c.createLinearGradient(0, 0, 0, v.h);
     g.addColorStop(0, this.biome.sky[0]);
@@ -468,12 +475,16 @@ class Game {
     g.addColorStop(1, this.biome.sky[2]);
     c.fillStyle = g;
     c.fillRect(0, 0, v.w, v.h);
-    c.fillStyle = 'rgba(255,255,255,0.02)';
-    for (let y = 0; y < v.rows; y++) {
-      for (let x = 0; x < COLS; x++) {
-        if ((x + y) % 2 === 0) c.fillRect(x * v.cell, y * v.cell, v.cell, v.cell);
-      }
-    }
+    // Checkerboard as a repeating 2x2-cell pattern tile: one fillRect instead
+    // of a per-cell loop over up to ~600 rects.
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = v.cell * 2;
+    const tc = tile.getContext('2d');
+    tc.fillStyle = 'rgba(255,255,255,0.02)';
+    tc.fillRect(0, 0, v.cell, v.cell);
+    tc.fillRect(v.cell, v.cell, v.cell, v.cell);
+    c.fillStyle = c.createPattern(tile, 'repeat');
+    c.fillRect(0, 0, v.w, v.h);
     for (const d of this.decor) {
       this.drawDecor(c, d, 0.55);
     }
@@ -482,6 +493,14 @@ class Game {
     vg.addColorStop(1, 'rgba(0,0,0,0.42)');
     c.fillStyle = vg;
     c.fillRect(0, 0, v.w, v.h);
+
+    this.bgCache.delete(want);
+    this.bgCache.set(want, cv);
+    if (this.bgCache.size > 4) {
+      this.bgCache.delete(this.bgCache.keys().next().value);
+    }
+    this.bgCanvas = cv;
+    this.bgKey = want;
   }
 
   drawDecor(c, d, crystalAlpha) {
@@ -957,7 +976,6 @@ class Game {
     this.biomeKey = key;
     this.biome = BIOMES[key];
     this.regenDecor();
-    this.bgGrad = null;
     this.sound.startMusic(this.biome.music);
     this.ui.toast(`🌍 Entering <b>${this.biome.name}</b>`, 'biome');
     if (this.save.settings.flash !== false) this.particles.flash('#ffffff', 0.1);
@@ -1477,14 +1495,15 @@ class Game {
   }
 
   drawBackground(ctx) {
-    if (!this.bgCanvas) this.buildBg();
+    const v = this.view;
+    const want = this.biomeKey + '|' + v.cell + '|' + v.dpr + '|' + v.rows;
+    if (this.bgKey !== want) this.buildBg();
     ctx.drawImage(this.bgCanvas, 0, 0, this.view.w, this.view.h);
     // Solid walls get a subtle glowing rail so the deadly boundary is readable
     const wrapOn = this.mode === 'zen'
       || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
       || (this.mode === 'daily' && dailyModActive('wrap'));
     if (!wrapOn && this.state !== 'menu') {
-      const v = this.view;
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 0.002);
       ctx.save();
       ctx.strokeStyle = `rgba(255, 107, 107, ${0.22 + pulse * 0.16})`;
