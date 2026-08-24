@@ -120,6 +120,8 @@ const CAUSE_TITLE = {
 
 const BIOME_ORDER = ['rainforest', 'oasis', 'cavern', 'reef'];
 
+const DIR_VALUES = Object.values(DIRS);
+
 function buzz(pattern) {
   const s = game.save.settings;
   if (!s || s.muted || s.sfx === 0) return;
@@ -217,32 +219,109 @@ class Game {
     }
   }
 
+  // Smarter menu AI: BFS shortest path to the apple (wrapping board), with a
+  // flood-fill space check so the snake doesn't box itself into a pocket.
+  // Falls back to greedy scoring when no safe path exists.
+  demoPickDir(s, apple) {
+    const R = liveRows();
+    const W = COLS;
+    const idx = (x, y) => y * W + x;
+    const blocked = new Uint8Array(W * R);
+    for (let i = 0; i < s.cells.length - 1; i++) { // tail cell vacates each step
+      blocked[idx(s.cells[i].x, s.cells[i].y)] = 1;
+    }
+    const start = idx(s.head.x, s.head.y);
+    const target = apple ? idx(apple.gx, apple.gy) : -1;
+    const prev = new Int16Array(W * R).fill(-1);
+    const seen = new Uint8Array(W * R);
+    seen[start] = 1;
+    const q = [start];
+    let found = false;
+    while (q.length) {
+      const cur = q.shift();
+      if (cur === target) { found = true; break; }
+      const cx2 = cur % W;
+      const cy2 = Math.floor(cur / W);
+      for (const d of DIR_VALUES) {
+        const nx = (cx2 + d.x + W) % W;
+        const ny = (cy2 + d.y + R) % R;
+        const ni = idx(nx, ny);
+        if (seen[ni] || blocked[ni]) continue;
+        seen[ni] = 1;
+        prev[ni] = cur;
+        q.push(ni);
+      }
+    }
+    if (!found) return null;
+    // Walk back to find the first step on the path
+    let step = target;
+    while (prev[step] !== start && prev[step] !== -1) step = prev[step];
+    if (prev[step] === -1) return null;
+    const sx = step % W;
+    const sy = Math.floor(step / W);
+    for (const d of DIR_VALUES) {
+      if ((s.head.x + d.x + W) % W === sx && (s.head.y + d.y + R) % R === sy) {
+        // Safety: don't take a path into a region smaller than our body length
+        if (this.floodFillSize(sx, sy, blocked, W, R) < s.cells.length) return null;
+        return d;
+      }
+    }
+    return null;
+  }
+
+  floodFillSize(x0, y0, blocked, W, R) {
+    if (blocked[y0 * W + x0]) return 0;
+    const seen = new Set([y0 * W + x0]);
+    const q = [[x0, y0]];
+    let n = 0;
+    while (q.length) {
+      const [cx, cy] = q.pop();
+      n++;
+      for (const d of DIR_VALUES) {
+        const nx = (cx + d.x + W) % W;
+        const ny = (cy + d.y + R) % R;
+        const ni = ny * W + nx;
+        if (!seen.has(ni) && !blocked[ni]) {
+          seen.add(ni);
+          q.push([nx, ny]);
+        }
+      }
+    }
+    return n;
+  }
+
   updateDemo(dt) {
     this.demoAcc += dt;
     while (this.demoAcc >= CONFIG.stepMs.demo) {
       this.demoAcc -= CONFIG.stepMs.demo;
       const s = this.demoSnake;
       const apple = this.demoFood.items[0];
-      const turns = [
-        { x: s.dir.x, y: s.dir.y },
-        { x: s.dir.y, y: -s.dir.x },
-        { x: -s.dir.y, y: s.dir.x }
-      ];
-      let bestDir = null;
-      let bestScore = Infinity;
-      for (const d of turns) {
-        const nx = (s.head.x + d.x + COLS) % COLS;
-        const R = liveRows();
-        const ny = (s.head.y + d.y + R) % R;
-        if (s.cells.some((c, i) => i < s.cells.length - 1 && c.x === nx && c.y === ny)) continue;
-        const dist = apple ? Math.abs(apple.gx - nx) + Math.abs(apple.gy - ny) : 0;
-        const score = dist + (d === turns[0] ? -0.4 : 0) + Math.random() * 0.35;
-        if (score < bestScore) {
-          bestScore = score;
-          bestDir = d;
+      const smart = this.demoPickDir(s, apple);
+      if (smart) {
+        s.dir = smart;
+      } else {
+        // Greedy fallback: keep the old heuristic behaviour
+        const turns = [
+          { x: s.dir.x, y: s.dir.y },
+          { x: s.dir.y, y: -s.dir.x },
+          { x: -s.dir.y, y: s.dir.x }
+        ];
+        let bestDir = null;
+        let bestScore = Infinity;
+        for (const d of turns) {
+          const nx = (s.head.x + d.x + COLS) % COLS;
+          const R = liveRows();
+          const ny = (s.head.y + d.y + R) % R;
+          if (s.cells.some((c, i) => i < s.cells.length - 1 && c.x === nx && c.y === ny)) continue;
+          const dist = apple ? Math.abs(apple.gx - nx) + Math.abs(apple.gy - ny) : 0;
+          const score = dist + (d === turns[0] ? -0.4 : 0) + Math.random() * 0.35;
+          if (score < bestScore) {
+            bestScore = score;
+            bestDir = d;
+          }
         }
+        if (bestDir) s.dir = bestDir;
       }
-      if (bestDir) s.dir = bestDir;
       const res = s.step({ wrap: true, cols: COLS, rows: liveRows(), ghost: false });
       if (res.death || !res) {
         this.resetDemo();

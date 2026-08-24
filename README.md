@@ -23,6 +23,10 @@
   - Web Audio API synthesizer with Dynamics Compressor peak limiting, multi-voice chords, combo chime arpeggios, and ambient soundscapes.
 - **In-Game Field Guide**:
   - Comprehensive bestiary detailing prey behaviors, power-up effects, biome hazards, and controls.
+- **Smart Menu Demo**:
+  - The attract-mode serpent on the menu plays itself with BFS pathfinding + flood-fill survival checks.
+- **Quality of Life**:
+  - Auto-pause on tab/window blur, gamepad support, PWA offline play, adaptive mobile board.
 
 ---
 
