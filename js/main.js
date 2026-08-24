@@ -390,7 +390,7 @@ class Game {
 
   isFreeCell(x, y) {
     if (!this.isPassableCell(x, y)) return false;
-    if (this.snake.cells.some(c => c.x === x && c.y === y)) return false;
+    if (this.snake.isOccupied(x, y)) return false;
     if (this.powerups && this.powerups.occupied && this.powerups.occupied(x, y)) return false;
     const h = this.snake.head;
     if (h && Math.abs(h.x - x) + Math.abs(h.y - y) < 3) return false;
@@ -399,7 +399,7 @@ class Game {
 
   isMagnetSafe(x, y) {
     if (!this.isPassableCell(x, y)) return false;
-    if (this.snake.cells.some(c => c.x === x && c.y === y)) return false;
+    if (this.snake.isOccupied(x, y)) return false;
     if (this.powerups.occupied(x, y)) return false;
     return true;
   }

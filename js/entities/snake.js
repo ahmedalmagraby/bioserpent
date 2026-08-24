@@ -80,6 +80,22 @@ function chaikin(pts) {
   return out;
 }
 
+// Precomputed color ramp per skin: drawBody indexes it by segment position
+// instead of calling lerpColor (string alloc) for every segment every frame.
+const RAMP_STEPS = 24;
+const _rampCache = new Map();
+function skinRamp(skin) {
+  let ramp = _rampCache.get(skin.id);
+  if (!ramp) {
+    ramp = new Array(RAMP_STEPS);
+    for (let i = 0; i < RAMP_STEPS; i++) {
+      ramp[i] = lerpColor(skin.c2, skin.c1, i / (RAMP_STEPS - 1));
+    }
+    _rampCache.set(skin.id, ramp);
+  }
+  return ramp;
+}
+
 function visOffsets(min, max, size) {
   const res = [];
   const first = Math.ceil(-max / size - 1e-9);
@@ -95,7 +111,28 @@ function visOffsets(min, max, size) {
 class Snake {
   constructor() {
     this.skin = SKINS[0];
+    // Occupancy map: key = y * 4096 + x → count. Maintained incrementally so
+    // collision/spawn checks are O(1) instead of scanning cells each time.
+    // Counts (not booleans) because ghost mode may stack the body on itself.
+    this.occ = new Map();
     this.reset(10, 10, { x: 1, y: 0 }, 4);
+  }
+
+  static occKey(x, y) { return y * 4096 + x; }
+
+  _occAdd(x, y) {
+    const k = Snake.occKey(x, y);
+    this.occ.set(k, (this.occ.get(k) || 0) + 1);
+  }
+
+  _occRemove(x, y) {
+    const k = Snake.occKey(x, y);
+    const n = (this.occ.get(k) || 0) - 1;
+    if (n <= 0) this.occ.delete(k); else this.occ.set(k, n);
+  }
+
+  isOccupied(x, y) {
+    return this.occ.has(y * 4096 + x);
   }
 
   reset(cx, cy, dir, len) {
@@ -103,10 +140,12 @@ class Snake {
     this.pending = [];
     this.cells = [];
     this.path = [];
+    this.occ.clear();
     for (let i = 0; i < len; i++) {
       const c = { x: cx - dir.x * i, y: cy - dir.y * i };
       this.cells.push(c);
       this.path.push({ x: c.x, y: c.y });
+      this._occAdd(c.x, c.y);
     }
     this.cX = cx;
     this.cY = cy;
@@ -135,6 +174,7 @@ class Snake {
   shrink(n) {
     const rem = Math.min(n, this.cells.length - 3);
     const removed = this.cells.splice(this.cells.length - rem, rem);
+    for (const c of removed) this._occRemove(c.x, c.y);
     if (this.path.length > this.cells.length + 2) this.path.length = this.cells.length + 2;
     return removed;
   }
@@ -183,7 +223,12 @@ class Snake {
     }
 
     this.cells.unshift({ x: nx, y: ny });
-    if (willGrow) this.growPending--; else this.cells.pop();
+    this._occAdd(nx, ny);
+    if (willGrow) this.growPending--;
+    else {
+      const tail = this.cells.pop();
+      this._occRemove(tail.x, tail.y);
+    }
     this.path.unshift({ x: this.cX, y: this.cY, cut });
     const maxPath = this.cells.length + 6;
     if (this.path.length > maxPath) this.path.length = maxPath;
@@ -394,6 +439,7 @@ function drawBody(ctx, pts, cell, skin, o) {
   const maxW = cell * 0.74;
   const time = o.time ?? 0;
   const alpha = o.alpha ?? 1;
+  const ramp = skin.banded ? null : skinRamp(skin);
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -417,7 +463,7 @@ function drawBody(ctx, pts, cell, skin, o) {
     segLine(ctx, pts[i], pts[i - 1]);
     ctx.strokeStyle = skin.banded
       ? (Math.floor((n - i) / 4) % 2 ? skin.c1 : skin.c2)
-      : lerpColor(skin.c2, skin.c1, 1 - u);
+      : ramp[Math.min(RAMP_STEPS - 1, ((1 - u) * (RAMP_STEPS - 1)) | 0)];
     ctx.lineWidth = w;
     segLine(ctx, pts[i], pts[i - 1]);
   }
