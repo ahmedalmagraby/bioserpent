@@ -229,6 +229,14 @@ class SoundManager {  constructor() {
     this.tone({ type: 'sine', f: 200, f2: 900, dur: 0.5, gain: 0.12, pan });
   }
 
+  rivalDown(pan) {
+    // Distinct descending sting so a rival death never reads as a glitch
+    this.tone({ type: 'sawtooth', f: 520, f2: 130, dur: 0.42, gain: 0.14, lp: 1800, lp2: 300, pan });
+    [392, 311, 233].forEach((f, i) => {
+      this.tone({ type: 'triangle', f, dur: 0.5, gain: 0.1, t: this.time + i * 0.09, echo: true, pan });
+    });
+  }
+
   death() {
     this.tone({ type: 'sine', f: 200, f2: 38, dur: 0.9, gain: 0.5 });
     [196, 233.1, 293.7].forEach(f => {

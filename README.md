@@ -25,6 +25,11 @@
   - Comprehensive bestiary detailing prey behaviors, power-up effects, biome hazards, and controls.
 - **Smart Menu Demo**:
   - The attract-mode serpent on the menu plays itself with BFS pathfinding + flood-fill survival checks.
+- **Rival Serpent AI** *(optional, off by default)*:
+  - Toggle in Settings → Classic Run gains an AI competitor that hunts the same apples.
+  - BFS pathfinding + flood-fill survival checks + tail-chasing when cornered; treats the player's whole body as lethal terrain.
+  - Adaptive pace (~1.15× your current speed), growth parity, size cap, distinct violet banded skin.
+  - Crash it for +25 points — it dissolves with a sting and respawns to keep the run competitive.
 - **Quality of Life**:
   - Auto-pause on tab/window blur, gamepad support, PWA offline play, adaptive mobile board.
 - **Performance**:

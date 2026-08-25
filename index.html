@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=20">
-<link rel="stylesheet" href="css/animations.css?v=20">
+<link rel="stylesheet" href="css/main.css?v=22">
+<link rel="stylesheet" href="css/animations.css?v=22">
 
 </head>
 <body>
@@ -203,6 +203,10 @@
         <input type="checkbox" id="setFlash">
         <span>💡 Flash effects</span>
       </label>
+      <label class="setting-row check">
+        <input type="checkbox" id="setRival">
+        <span>🐍 Rival serpent (Classic Run)</span>
+      </label>
       <p class="setting-sub-hint">Walls wrap mode only applies to Classic Run.</p>
       <p class="hint">Desktop: Arrows / WASD steer · hold Shift for speed burst · Space pauses · M mute</p>
       <div class="stack row">
@@ -232,18 +236,19 @@
 
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=20"></script>
-<script src="js/engine/gameLoop.js?v=20"></script>
-<script src="js/engine/inputManager.js?v=20"></script>
-<script src="js/engine/particleSystem.js?v=20"></script>
-<script src="js/audio/soundManager.js?v=20"></script>
-<script src="js/entities/snake.js?v=20"></script>
-<script src="js/entities/food.js?v=20"></script>
-<script src="js/entities/powerups.js?v=20"></script>
-<script src="js/entities/obstacles.js?v=20"></script>
-<script src="js/levels/levelData.js?v=20"></script>
-<script src="js/ui/uiManager.js?v=20"></script>
-<script src="js/main.js?v=20"></script>
+<script src="js/engine/canvas.js?v=22"></script>
+<script src="js/engine/gameLoop.js?v=22"></script>
+<script src="js/engine/inputManager.js?v=22"></script>
+<script src="js/engine/particleSystem.js?v=22"></script>
+<script src="js/audio/soundManager.js?v=23"></script>
+<script src="js/entities/snake.js?v=22"></script>
+<script src="js/entities/rival.js?v=22"></script>
+<script src="js/entities/food.js?v=22"></script>
+<script src="js/entities/powerups.js?v=22"></script>
+<script src="js/entities/obstacles.js?v=22"></script>
+<script src="js/levels/levelData.js?v=22"></script>
+<script src="js/ui/uiManager.js?v=22"></script>
+<script src="js/main.js?v=22"></script>
 
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

@@ -1,7 +1,7 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { View, COLS, ROWS, BASE_ROWS, clamp, rand, randi, TAU, mulberry32, GameLoop, InputManager, DIRS, Particles, SoundManager, Snake, SKINS, FoodManager, PowerUpManager, POWERUP_META, Obstacles, LEVELS, BIOMES, UIManager, CONFIG } = BS;
+const { View, COLS, ROWS, BASE_ROWS, clamp, rand, randi, TAU, mulberry32, GameLoop, InputManager, DIRS, Particles, SoundManager, Snake, SKINS, FoodManager, PowerUpManager, POWERUP_META, Obstacles, LEVELS, BIOMES, UIManager, CONFIG, Rival } = BS;
 
 // Live row count for the active game (adaptive board height). Use this instead
 // of the static ROWS constant anywhere the *current* playfield matters.
@@ -14,7 +14,7 @@ function defaultSave() {
     best: { classic: 0, timeattack: 0, zen: 0 },
     levelBest: {},
     stars: {},
-    settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true },
+    settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true, rival: false },
     daily: { key: '', best: 0, streak: 0, lastPlayed: '' },
     history: {},
     skin: 'emerald',
@@ -115,7 +115,8 @@ const CAUSE_TITLE = {
   self: 'You bit yourself!',
   rock: 'Crushed on a rock',
   bramble: 'Pricked by brambles',
-  spore: 'Poisoned by spores'
+  spore: 'Poisoned by spores',
+  rival: 'Devoured by the rival serpent!'
 };
 
 const BIOME_ORDER = ['rainforest', 'oasis', 'cavern', 'reef'];
@@ -175,6 +176,7 @@ class Game {
     this._lastTickSec = 91;
     this._urgent = false;
     this._lastBurstI = 0;
+    this.rival = null;
     this.bgCanvas = null;
     this.bgKey = '';
     this.bgCache = new Map();   // baked backgrounds keyed per biome + size
@@ -698,6 +700,13 @@ class Game {
       }
     }
     this.food.spawnApple((x, y) => this.isFreeCell(x, y));
+    // Rival serpent (Classic only, off by default — Settings toggle)
+    if (mode === 'classic' && this.save.settings.rival) {
+      this.rival = new Rival();
+      this.rival.reset(this.view, this.snake.cells, null, 6);
+    } else {
+      this.rival = null;
+    }
     this.biomeStage = 0;
     this.newBestShown = false;
     this.dissolving = false;
@@ -834,6 +843,15 @@ class Game {
   applySettings() {
     this.sound.setVolumes(this.save.settings);
     this.input.setPref(this.save.settings.touch);
+    // Rival toggle: removing it despawns immediately (any state); enabling it
+    // spawns whenever a Classic run exists or is starting — including from the
+    // menu/pause/game-over paths, so the rival can never silently go missing.
+    if (this.rival && !this.save.settings.rival) this.rival = null;
+    if (!this.rival && this.save.settings.rival && this.mode === 'classic'
+        && this.state !== 'menu') {
+      this.rival = new Rival();
+      this.rival.reset(this.view, this.snake.cells || [], null, 4);
+    }
     if (this.state === 'playing' || this.state === 'countdown') {
       this.ui.setDpadVisible(this.input.mode === 'dpad');
     }
@@ -1040,6 +1058,52 @@ class Game {
     this.finishRun(false, CAUSE_TITLE[cause] || 'Game Over', cause === 'time');
   }
 
+  // The rival crashed on its own — dissolve it with a flourish and keep playing.
+  killRival() {
+    const r = this.rival;
+    if (!r) return;
+    this.rival = null;
+    if (this.run && this.mode === 'classic') {
+      this.run.score += 25;
+      buzz([15, 30, 15]);
+      this.particles.popup(
+        this.view.cx(r.snake.head.x),
+        this.view.cy(r.snake.head.y) - this.view.cell * 0.4,
+        '+25', '#b388ff', 14
+      );
+    }
+    const rsp = r.snake.sampleSpine(this.view, r.tFrac);
+    for (const strand of rsp.all) {
+      for (let i = 0; i < strand.length; i += 3) {
+        this.particles.burst(strand[i].px, strand[i].py, {
+          count: 6, colors: ['#b388ff', '#f8bbd0', '#ffffff'],
+          speed: 0.12, size: 2.4, life: 800, grav: 0.0004
+        });
+      }
+    }
+    this.particles.popup(
+      this.view.cx(r.snake.head.x),
+      this.view.cy(r.snake.head.y) - this.view.cell,
+      'RIVAL DOWN! +25', '#b388ff', 21
+    );
+    this.sound.rivalDown(this._pan);
+    if (this.save.settings.flash !== false) this.particles.flash('#b388ff', 0.12);
+    // Respawn after a short delay so the run keeps its competitor
+    setTimeout(() => {
+      if (this.save.settings.rival && !this.rival && this.mode === 'classic'
+          && this.state === 'playing') {
+        this.rival = new Rival();
+        this.rival.reset(this.view, this.snake.cells || [], null, 5);
+        const nr = this.rival.snake.head;
+        this.particles.burst(this.view.cx(nr.x), this.view.cy(nr.y), {
+          count: 16, colors: ['#b388ff', '#f8bbd0', '#ffffff'], speed: 0.14, size: 2.2, life: 600, type: 'glow'
+        });
+        this.particles.popup(this.view.cx(nr.x), this.view.cy(nr.y) - this.view.cell,
+          'A new rival slithers in…', '#b388ff', 14);
+      }
+    }, 2600);
+  }
+
   recordDailyScore() {
     const today = dayKey();
     const d = this.save.daily;
@@ -1167,7 +1231,7 @@ class Game {
   }
 
 
-  doStep() {
+  doStep(dt = 16) {
     const env = {
       wrap: this.mode === 'zen'
         || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
@@ -1205,6 +1269,16 @@ class Game {
     this._pan = (this.view.cx(h.x) / this.view.w) * 2 - 1;
     const pw = this.powerups.collide(h.x, h.y);
     if (pw) this.activatePower(pw.type);
+    // Player head vs rival body/head — mutual destruction
+    if (this.rival) {
+      const rc = this.rival.snake.cells;
+      for (let i = 0; i < rc.length; i++) {
+        if (rc[i].x === h.x && rc[i].y === h.y) {
+          this.die('rival');
+          return;
+        }
+      }
+    }
     const newLen = this.snake.length;
     if (newLen !== this.lastLen) {
       if (this.milestone && newLen >= this.milestone) {
@@ -1317,6 +1391,46 @@ class Game {
     this.time += dt;
     this.particles.update(dt);
     this.particles.ambient(this.state === 'menu' || this.state === 'playing' || this.state === 'countdown' ? this.biomeKey : null, this.view.w, this.view.h, dt);
+    // Rival serpent: think + move on the real frame clock, its own cadence.
+    // Pace adapts to the player's speed curve so it stays threatening late-game.
+    if (this.rival && this.state === 'playing') {
+      const rivalPace = Math.max(CONFIG.minStepMs, Math.round(this.stepMs * 1.15));
+      const rivalStep = this.rival.step(dt, {
+        wrap: this.mode === 'zen'
+          || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
+          || (this.mode === 'daily' && dailyModActive('wrap')),
+        cols: COLS,
+        rows: liveRows(),
+        stepMs: rivalPace,
+        hazardAt: (x, y) => this.obstacles.blocked(x, y),
+        hazardVer: this.obstacles._ver,
+        playerCells: this.snake.cells,
+        target: this.food.items.find(i => i.type === 'apple') || null
+      });
+      if (rivalStep && rivalStep.death) this.killRival();
+      // Rival eats apples too — denies the player and grows itself
+      if (this.rival && rivalStep) {
+        const rh = this.rival.snake.head;
+        const stolen = this.food.collideCell(rh.x, rh.y);
+        if (stolen && stolen.type === 'apple') {
+          this.rival.snake.grow(1);   // same growth rate as the player
+          this.rival.snake.eatPulse();
+          if (this.rival.snake.length >= 13) {
+            // Size cap: keep the rival a peer, not a board-filling leviathan
+            this.rival.snake.growPending = 0;
+          }
+          this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
+            count: 10, colors: ['#b388ff', '#e53935', '#ff8a80'], speed: 0.1, size: 2, life: 450
+          });
+          this.particles.popup(this.view.cx(rh.x), this.view.cy(rh.y) - this.view.cell, 'Rival ate it!', '#b388ff', 13);
+          this.sound.bite(this._pan);
+          buzz(8);
+          if (!this.food.items.some(i => i.type === 'apple')) {
+            this.food.spawnApple((x, y) => this.isFreeCell(x, y));
+          }
+        }
+      }
+    }
     if (this.state === 'menu') {
       this.updateDemo(dt);
       return;
@@ -1553,6 +1667,10 @@ class Game {
         magnet: this.effects.magnet > 0,
         combo: this.combo
       });
+    }
+    if (inGame && this.rival) {
+      this.rival.render(ctx, v, this.time,
+        this.food.items.find(i => i.type === 'apple') || null);
     }
     this.particles.render(ctx);
     ctx.restore();

@@ -138,7 +138,8 @@ class UIManager {
       touch: this.$('setTouch'),
       walls: this.$('setWalls'),
       shake: this.$('setShake'),
-      flash: this.$('setFlash')
+      flash: this.$('setFlash'),
+      rival: this.$('setRival')
     };
     s.music.addEventListener('input', () => {
       this.h.onSettingsChange({ music: s.music.value / 100 });
@@ -153,6 +154,7 @@ class UIManager {
     s.walls.addEventListener('change', () => this.h.onSettingsChange({ walls: s.walls.value }));
     if (s.shake) s.shake.addEventListener('change', () => this.h.onSettingsChange({ shake: s.shake.checked }));
     if (s.flash) s.flash.addEventListener('change', () => this.h.onSettingsChange({ flash: s.flash.checked }));
+    if (s.rival) s.rival.addEventListener('change', () => this.h.onSettingsChange({ rival: s.rival.checked }));
   }
 
 
@@ -398,6 +400,8 @@ class UIManager {
     if (shakeEl) shakeEl.checked = s.shake !== false;
     const flashEl = this.$('setFlash');
     if (flashEl) flashEl.checked = s.flash !== false;
+    const rivalEl = this.$('setRival');
+    if (rivalEl) rivalEl.checked = !!s.rival;
   }
 
   updateMenuSubLabels(bests, starsSum, totalStars = 36, extra = null) {
