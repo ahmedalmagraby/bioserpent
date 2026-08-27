@@ -141,8 +141,13 @@ class FoodManager {
   }
 
   update(dt, env) {
+    const R = liveRows();
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
+      if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
+        this.items.splice(i, 1);
+        continue;
+      }
       it.age += dt;
       it.hop = Math.max(0, it.hop - dt * 0.004);
       if (it.pop !== undefined && it.pop < 1) it.pop = Math.min(1, it.pop + dt / 220);

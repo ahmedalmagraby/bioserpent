@@ -595,6 +595,18 @@ class Game {
 
   onResize() {
     this.regenDecor();
+    if (this.food && (this.state === 'playing' || this.state === 'countdown')) {
+      const R = liveRows();
+      for (let i = this.food.items.length - 1; i >= 0; i--) {
+        const it = this.food.items[i];
+        if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
+          this.food.items.splice(i, 1);
+        }
+      }
+      if (!this.food.items.some(i => i.type === 'apple' && i.gy < R && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
+        this.food.spawnApple((x, y) => this.isFreeCell(x, y));
+      }
+    }
   }
 
   currentBest() {
@@ -639,6 +651,14 @@ class Game {
     const dk = { haste: '🏜️', giant: '🦣', wrap: '🌀', ghosty: '👻', frenzy: '🔥' };
     // Campaign maps are authored on a fixed 20x20 grid — lock the board square.
     this.view.forcedRows = mode === 'level' ? BASE_ROWS : null;
+
+    // Apply active HUD and screen visibility before calculating board dimensions
+    this.ui.setHUD(true);
+    this.ui.showScreen(null);
+    this.ui.setDpadVisible(this.input.mode === 'dpad');
+    this.view.resize();
+    this.onResize();
+
     this.biomeKey = mode === 'level' ? lv.biome
       : mode === 'daily' ? ['rainforest', 'oasis', 'cavern', 'reef'][epochDays() % 4]
       : mode === 'timeattack' ? 'oasis' : mode === 'zen' ? 'reef' : 'rainforest';
@@ -733,11 +753,6 @@ class Game {
     this.countdownTimer = 1600;
     this.countdownNum = 3;
     this.ui.showCountdown(3);
-    this.ui.setHUD(true);
-    this.ui.showScreen(null);
-    this.ui.setDpadVisible(this.input.mode === 'dpad');
-    this.view.resize();
-    this.onResize();
     this.sound.startMusic(this.biome.music);
     this.sound.click();
     this.hudTimer = 999;
@@ -1316,7 +1331,7 @@ class Game {
         this.particles.burst(nx, ny, { count: 6, colors: ['#48dbfb', '#ffffff'], speed: 0.1, size: 1.6, life: 350 });
       }
     }
-    if (!this.food.items.some(i => i.type === 'apple')) {
+    if (!this.food.items.some(i => i.type === 'apple' && i.gy < liveRows() && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
       this.food.spawnApple((x, y) => this.isFreeCell(x, y));
     }
     this.run.lengthMax = Math.max(this.run.lengthMax, this.snake.length);
@@ -1523,6 +1538,9 @@ class Game {
     const mouthTarget = near && near.d < this.view.cell * 2.6 ? clamp(1 - near.d / (this.view.cell * 2.6), 0, 1) : 0;
     this.snake.tick(dt, mouthTarget);
     this.food.update(effDt, { isFree: (x, y) => this.isFreeCell(x, y), view: this.view, particles: this.particles, head: this.snake.head });
+    if (!this.food.items.some(i => i.type === 'apple' && i.gy < liveRows() && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
+      this.food.spawnApple((x, y) => this.isFreeCell(x, y));
+    }
     this.powerups.update(effDt);
     this.obstacles.update(dt);
     this.insectTimer -= dt;
@@ -1693,6 +1711,7 @@ const canvas = document.getElementById('game');
 const stage = document.getElementById('stage');
 const view = new View(canvas, stage);
 const sound = new SoundManager();
+Object.assign(BS, { view, sound });
 
 const game = new Game(view, sound, null, null);
 

@@ -272,8 +272,8 @@ class Rival {
   render(ctx, view, time, target) {
     this.snake.render(ctx, view, this.tFrac, time, {
       ghost: false,
-      lookX: target ? target.gx : null,
-      lookY: target ? target.gy : null
+      lookX: target ? view.cx(target.gx) : null,
+      lookY: target ? view.cy(target.gy) : null
     });
   }
 }
