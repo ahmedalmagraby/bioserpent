@@ -653,9 +653,6 @@ class Game {
     this.ui.setHUD(true);
     this.ui.showScreen(null);
     this.ui.setDpadVisible(this.input.mode === 'dpad');
-    this.view.resize();
-    this.onResize();
-
     this.biomeKey = mode === 'level' ? lv.biome
       : mode === 'daily' ? ['rainforest', 'oasis', 'cavern', 'reef'][epochDays() % 4]
       : mode === 'timeattack' ? 'oasis' : mode === 'zen' ? 'reef' : 'rainforest';
@@ -1127,7 +1124,9 @@ class Game {
       // First run of a new day: extend streak only if yesterday was played
       const y = new Date();
       y.setDate(y.getDate() - 1);
-      d.streak = d.lastPlayed === dayKey(y) ? (d.streak || 0) + 1 : 1;
+      // Extend if yesterday was played; reset to 1 for a broken streak, or
+      // start at 0 on first-ever play so the counter semantically means "days maintained".
+      d.streak = d.lastPlayed === dayKey(y) ? (d.streak || 0) + 1 : (d.lastPlayed ? 1 : 0);
       d.key = today;
       d.best = 0;
     }

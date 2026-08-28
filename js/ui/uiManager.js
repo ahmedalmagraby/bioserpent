@@ -411,9 +411,16 @@ class UIManager {
     if (this.el.subZen) this.el.subZen.textContent = `Best Length: ${bests.zen || 0}`;
     if (this.el.subDaily && extra && extra.daily) {
       const parts = [`Today's Best: ${extra.daily.best || 0}`];
-      if (extra.daily.streak > 1) parts.push(`🔥 ${extra.daily.streak}-day streak`);
+      // BUG-11: show streak badge from day 1 (>= 1) instead of day 3 (> 1)
+      if (extra.daily.streak >= 1) parts.push(`🔥 ${extra.daily.streak}-day streak`);
       else if (!extra.daily.playedToday) parts.push('New challenge!');
       this.el.subDaily.textContent = parts.join(' · ');
+    }
+    // BUG-12: toggle 'new-daily' on the daily button so the CSS ::after "NEW" badge
+    // only renders when the daily hasn't been played today.
+    const btnDaily = this.$('btnDaily');
+    if (btnDaily && extra && extra.daily) {
+      btnDaily.classList.toggle('new-daily', !extra.daily.playedToday);
     }
   }
 

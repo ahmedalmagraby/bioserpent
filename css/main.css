@@ -411,7 +411,7 @@ body.dpad-open #stage {
   background: linear-gradient(135deg, rgba(255, 213, 74, 0.14), rgba(255, 159, 67, 0.1));
 }
 .btn.daily .btn-sub { color: var(--gold); }
-.btn.daily::after {
+.btn.daily.new-daily::after {
   content: 'NEW';
   position: absolute;
   top: -7px;
