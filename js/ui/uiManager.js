@@ -583,7 +583,7 @@ class UIManager {
         <div class="guide-grid">
           <div class="guide-card"><div class="g-icon">🧲</div><div><b>Magnet Spore [M]</b><p>Generates a magnetic field pulling all nearby berries directly to your jaws.</p></div></div>
           <div class="guide-card"><div class="g-icon">⏱</div><div><b>Slow-Mo Amber [S]</b><p>Dilates time by 50%, granting total precision through obstacle mazes.</p></div></div>
-          <div class="guide-card"><div class="g-icon">👻</div><div><b>Ghost Phase [G]</b><p>Phase through your own body and solid stone without taking damage.</p></div></div>
+          <div class="guide-card"><div class="g-icon">👻</div><div><b>Ghost Phase [G]</b><p>Phase through your own body and all hazards — rocks, brambles, and spores — without taking damage.</p></div></div>
           <div class="guide-card"><div class="g-icon">✖️</div><div><b>2× Multiplier [×2]</b><p>Doubles all score gains from prey and berries during its active duration.</p></div></div>
           <div class="guide-card"><div class="g-icon">✂️</div><div><b>Prune Shroom [−3]</b><p>Instantly trims 3 tail segments to squeeze safely through tight tunnels.</p></div></div>
         </div>`;

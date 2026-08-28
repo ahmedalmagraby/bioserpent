@@ -212,14 +212,21 @@ class Snake {
       return { death: 'wall' };
     }
     const willGrow = this.growPending > 0;
-    if (!env.ghost && !teleported) {
-      const lim = this.cells.length - (willGrow ? 0 : 1);
-      for (let i = 0; i < lim; i++) {
-        const c = this.cells[i];
-        if (c.x === nx && c.y === ny) return { death: 'self' };
+    if (!teleported) {
+      // Self-collision: skipped by Ghost Phase power-up (ghost) or by Zen / daily ghosty (ghostSelf).
+      if (!env.ghost && !env.ghostSelf) {
+        const lim = this.cells.length - (willGrow ? 0 : 1);
+        for (let i = 0; i < lim; i++) {
+          const c = this.cells[i];
+          if (c.x === nx && c.y === ny) return { death: 'self' };
+        }
       }
-      const ob = env.blocked ? env.blocked(nx, ny) : null;
-      if (ob) return { death: ob };
+      // Obstacle collision: skipped only by the Ghost Phase power-up (ghost).
+      // Zen mode and the daily ghosty modifier do NOT grant obstacle immunity.
+      if (!env.ghost) {
+        const ob = env.blocked ? env.blocked(nx, ny) : null;
+        if (ob) return { death: ob };
+      }
     }
 
     this.cells.unshift({ x: nx, y: ny });

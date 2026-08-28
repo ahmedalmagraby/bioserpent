@@ -407,6 +407,9 @@ class Game {
   }
 
   regenDecor() {
+    // Guard: view must be sized before generating pixel-coordinate decor.
+    // This can be called during construction before the first layout pass completes.
+    if (!this.view || !this.view.w || !this.view.h) return;
     const rng = mulberry32(this.biomeKey.length * 7919 + this.biomeKey.charCodeAt(0) * 131);
     const w = this.view.w;
     const h = this.view.h;
@@ -623,15 +626,9 @@ class Game {
     if (wasDailyActive) {
       this.recordDailyScore();
     }
-    if (this.mode === 'zen' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
-      this.save.stats.games++;
-      this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
-      if (this.snake.length > this.save.best.zen) {
-        this.save.best.zen = this.snake.length;
-        this.persist();
-      }
-      this.checkBadges();
-    }
+    // Note: Zen-mode save-on-restart is handled exclusively by the onRestart handler
+    // (and gotoMenu) before calling startRun(), so we do NOT duplicate it here.
+    // startRun() is also called on first launch and mode switches where no prior run exists.
     this.sound.unlock();
     this.ui.closeSettingsModal();
     this.ui.closeSaveModal();
@@ -1103,8 +1100,12 @@ class Game {
     );
     this.sound.rivalDown(this._pan);
     if (this.save.settings.flash !== false) this.particles.flash('#b388ff', 0.12);
-    // Respawn after a short delay so the run keeps its competitor
+    // Respawn after a short delay so the run keeps its competitor.
+    // _rivalRunId is incremented here; the callback checks it to detect stale callbacks
+    // that fired after the player restarted or quit.
+    const spawnId = (this._rivalRunId = (this._rivalRunId || 0) + 1);
     setTimeout(() => {
+      if (this._rivalRunId !== spawnId) return;   // stale: run has moved on
       if (this.save.settings.rival && !this.rival && this.mode === 'classic'
           && this.state === 'playing') {
         this.rival = new Rival();
@@ -1176,7 +1177,10 @@ class Game {
     } else if (this.mode === 'zen') {
       if (this.snake.length > s.best.zen) { s.best.zen = this.snake.length; newBest = true; }
     } else if (this.mode === 'daily') {
-      if (this.run.score > (s.daily.best || 0)) { s.daily.best = this.run.score; newBest = true; }
+      // recordDailyScore() (called below) is the authoritative handler for daily.best and streak.
+      // Capture the newBest flag here — before recordDailyScore() can reset daily.best on a new-day boundary —
+      // so the game-over NEW BEST banner still fires correctly.
+      newBest = this.run.score > (s.daily.best || 0);
     } else if (this.mode === 'level') {
       const prev = s.levelBest[this.levelIdx] || 0;
       if (this.run.score > prev) { s.levelBest[this.levelIdx] = this.run.score; newBest = true; }
@@ -1253,7 +1257,10 @@ class Game {
         || (this.mode === 'daily' && dailyModActive('wrap')),
       cols: COLS,
       rows: liveRows(),
-      ghost: this.effects.ghost > 0 || this.mode === 'zen' || (this.mode === 'daily' && dailyModActive('ghosty')),
+      ghost: this.effects.ghost > 0,
+      // ghostSelf: also skip self-collision in Zen mode and with the daily 'ghosty' modifier.
+      // The Ghost Phase power-up sets both flags; ghosty/Zen set only ghostSelf.
+      ghostSelf: this.effects.ghost > 0 || this.mode === 'zen' || (this.mode === 'daily' && dailyModActive('ghosty')),
       blocked: (x, y) => this.obstacles.blocked(x, y),
       portalAt: (x, y) => this.obstacles.portalAt(x, y)
     };
@@ -1316,7 +1323,7 @@ class Game {
       this.lastLen = newLen;
     }
     // Near-miss: skim past a hazard without touching it for bonus points
-    if (this._nearMissCd > 0) this._nearMissCd -= CONFIG.hudThrottleMs;
+    if (this._nearMissCd > 0) this._nearMissCd -= dt;
     if (this._nearMissCd <= 0) {
       const nd = this.obstacles.nearMissDistance(h.x, h.y);
       if (nd !== null && nd <= CONFIG.nearMissDist) {

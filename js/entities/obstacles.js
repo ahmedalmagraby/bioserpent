@@ -21,6 +21,10 @@ class Obstacles {
     this.spores.length = 0;
     this.portals.length = 0;
     this._ver++;
+    // Rebuild (or zero-fill) the lookup grid so blocked() returns null for all cells.
+    const cols = this._gridCols || COLS;
+    const rows = this._gridRows || ROWS;
+    this._rebuildGrid(cols, rows);
   }
 
   loadFromMap(rows) {
@@ -53,6 +57,9 @@ class Obstacles {
       pi++;
     }
     this._ver++;
+    // Build the O(1) lookup grid now that all hazard positions are known.
+    const boardRows = BS.view ? BS.view.rows : ROWS;
+    this._rebuildGrid(COLS, boardRows);
   }
 
   _bakeRocks(view) {
@@ -107,10 +114,27 @@ class Obstacles {
     return r;
   }
 
+  // _gridAt returns the raw hazard code (1=rock,2=bramble,3=spore) or 0 for the given cell.
+  // The grid is rebuilt in loadFromMap() and cleared in clear().
+  _gridAt(x, y) {
+    if (!this._grid || x < 0 || y < 0 || x >= this._gridCols || y >= this._gridRows) return 0;
+    return this._grid[y * this._gridCols + x];
+  }
+
+  _rebuildGrid(cols, rows) {
+    this._gridCols = cols;
+    this._gridRows = rows;
+    this._grid = new Uint8Array(cols * rows); // initialised to 0
+    for (const r of this.rocks)    this._grid[r.y * cols + r.x] = 1;
+    for (const b of this.brambles) this._grid[b.y * cols + b.x] = 2;
+    for (const s of this.spores)   this._grid[s.y * cols + s.x] = 3;
+  }
+
   blocked(x, y) {
-    if (this.rocks.some(r => r.x === x && r.y === y)) return 'rock';
-    if (this.brambles.some(b => b.x === x && b.y === y)) return 'bramble';
-    if (this.spores.some(s => s.x === x && s.y === y)) return 'spore';
+    const v = this._gridAt(x, y);
+    if (v === 1) return 'rock';
+    if (v === 2) return 'bramble';
+    if (v === 3) return 'spore';
     return null;
   }
 

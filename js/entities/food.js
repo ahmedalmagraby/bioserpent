@@ -330,7 +330,7 @@ class FoodManager {
         ctx.rotate(wob);
         ctx.fillStyle = 'rgba(0,0,0,0.22)';
         ctx.beginPath();
-        ctx.ellipse(0, cell * 0.3 - (y - y), cell * 0.22, cell * 0.06, 0, 0, TAU);
+        ctx.ellipse(0, cell * 0.3, cell * 0.22, cell * 0.06, 0, 0, TAU);
         ctx.fill();
         const g = ctx.createRadialGradient(-cell * 0.07, -cell * 0.09, 1, 0, 0, cell * 0.34);
         g.addColorStop(0, '#fffdf4');
