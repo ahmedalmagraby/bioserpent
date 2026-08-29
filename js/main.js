@@ -1355,24 +1355,31 @@ class Game {
     let stats;
     if (this.mode === 'timeattack') {
       const t = Math.max(0, this.taTime / 1000).toFixed(1);
-      stats = [{ v: t, l: 'Time', cls: this.taTime <= CONFIG.taUrgentMs ? 'danger' : '' }];
+      stats = [
+        { v: t + 's', l: 'Time', icon: '⏱', cls: 'timer-stat' + (this.taTime <= CONFIG.taUrgentMs ? ' danger' : '') },
+        { v: String(this.snake.length), l: 'Length', icon: '📏' }
+      ];
     } else if (this.mode === 'level') {
       const goal = LEVELS[this.levelIdx].goalApples;
       stats = [
-        { v: this.run.apples + '/' + goal, l: 'Goal' },
-        { v: String(this.snake.length), l: 'Length' }
+        { v: `LV ${String(this.levelIdx + 1).padStart(2, '0')}`, l: LEVELS[this.levelIdx].name, cls: 'level-badge' },
+        { v: `${this.run.apples}/${goal}`, l: 'Goal', icon: '🍎', cls: 'goal-stat' },
+        { v: String(this.snake.length), l: 'Length', icon: '📏' }
       ];
     } else if (this.mode === 'zen') {
-      stats = [{ v: String(this.snake.length), l: 'Length' }];
+      stats = [
+        { v: 'Zen Flow', l: '', icon: '🪷', cls: 'biome-stat' },
+        { v: String(this.snake.length), l: 'Length', icon: '📏' }
+      ];
     } else {
       const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
       const nextBiomeIn = 12 - (this.run.foodEaten % 12);
+      const biomeIcon = this.biomeKey === 'rainforest' ? '🌿' : this.biomeKey === 'oasis' ? '☀️' : this.biomeKey === 'cavern' ? '💎' : '🌊';
+      const biomeName = this.biome.name.split(' ')[0];
       stats = [
-        { v: String(this.snake.length), l: 'Length' },
-        { v: String(this.run.apples), l: 'Apples' },
-        { v: this.biome.name.split(' ')[0], l: 'Biome' },
-        { v: String(nextBiomeIn), l: 'Next Biome' },
-        { v: speed, l: 'Speed' }
+        { v: biomeName, l: `${nextBiomeIn} to shift`, icon: biomeIcon, cls: 'biome-stat ' + this.biomeKey, title: `Biome changes in ${nextBiomeIn} nourishment` },
+        { v: String(this.snake.length), l: 'Length', icon: '📏' },
+        { v: speed, l: 'Speed', icon: '⚡' }
       ];
     }
     let bar = null;

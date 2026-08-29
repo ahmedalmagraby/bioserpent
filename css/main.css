@@ -49,157 +49,287 @@ html, body {
 #hud {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px 4px;
+  padding: 8px 14px 4px;
   z-index: 20;
   flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
+.hud-zone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-.hud-chip {
+.hud-left {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-score-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   background: var(--glass);
   border: 1px solid var(--stroke);
   border-radius: 14px;
-  padding: 6px 14px;
+  padding: 4px 12px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  min-width: 86px;
+  min-width: 78px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.hud-chip.right { align-items: flex-end; }
-
 .hud-label {
-  font-size: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-dim);
+  line-height: 1.1;
 }
 
 .hud-value {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
+  color: #ffffff;
+  display: inline-block;
 }
 
-#hudCenter {
+.hud-best-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 213, 74, 0.08);
+  border: 1px solid rgba(255, 213, 74, 0.22);
+  border-radius: 12px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.hud-best-icon {
+  font-size: 11px;
+}
+
+.hud-best-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.hud-center {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   min-width: 0;
+  gap: 2px;
 }
 
-#hudStats {
+.hud-stats {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
-  min-height: 26px;
+  min-height: 28px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .stat {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 5px;
   background: var(--glass);
   border: 1px solid var(--stroke);
   border-radius: 12px;
-  padding: 3px 11px;
+  padding: 4px 10px;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  white-space: nowrap;
+  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
+
+.stat-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
 .stat b {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  line-height: 1.1;
+  color: #fff;
 }
+
 .stat small {
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-dim);
+  margin-left: 2px;
 }
-.stat.danger b { color: #ff6b6b; animation: urgentPulse 0.5s ease-in-out infinite; }
 
-#hudCombo {
-  display: block;
-  height: 18px;
-  margin-top: 2px;
-  font-size: 13px;
+.stat.biome-stat {
+  border-color: rgba(126, 224, 138, 0.35);
+  background: rgba(126, 224, 138, 0.06);
+}
+.stat.biome-stat.rainforest { border-color: rgba(87, 160, 90, 0.45); }
+.stat.biome-stat.oasis { border-color: rgba(217, 169, 95, 0.45); }
+.stat.biome-stat.cavern { border-color: rgba(110, 231, 240, 0.45); }
+.stat.biome-stat.reef { border-color: rgba(84, 194, 216, 0.45); }
+
+.stat.goal-stat {
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.06);
+}
+
+.stat.level-badge {
+  border-color: rgba(62, 201, 122, 0.35);
   font-weight: 800;
-  color: var(--gold);
-  text-shadow: 0 0 12px rgba(255, 213, 74, 0.7);
-  transition: opacity 0.2s ease;
 }
 
-#hudCenter.urgent #hudStats {
+.stat.timer-stat {
+  border-color: rgba(255, 213, 74, 0.35);
+  background: rgba(255, 213, 74, 0.06);
+}
+
+.stat.danger b, .stat.timer-stat.danger b {
+  color: var(--danger);
+}
+.stat.timer-stat.danger {
+  border-color: rgba(255, 107, 107, 0.6);
+  animation: urgentPulse 0.5s ease-in-out infinite;
+}
+
+.hud-combo {
+  display: block;
+  height: 16px;
+  margin-top: 1px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 213, 74, 0.6);
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+#hudCenter.urgent .hud-stats {
   filter: drop-shadow(0 0 10px rgba(255, 80, 80, 0.75));
   animation: urgentPulse 0.5s ease-in-out infinite;
 }
 
-.icon-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 1px solid var(--stroke);
-  background: var(--glass);
-  color: var(--ink);
-  font-size: 14px;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: transform 0.15s ease, background 0.2s ease;
-}
-.icon-btn:hover { background: rgba(255, 255, 255, 0.14); transform: scale(1.06); }
-.icon-btn:active { transform: scale(0.94); }
-
-#chipBar {
-  display: flex;
-  gap: 8px;
-  padding: 4px 14px 2px;
-  min-height: 34px;
-  flex-wrap: nowrap;
+.hud-bar {
+  width: min(180px, 35vw);
+  height: 3.5px;
+  margin: 2px auto 0;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
   overflow: hidden;
-  z-index: 20;
-  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.hud-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.08s linear;
+}
+
+.hud-right {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hud-buffs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  pointer-events: none;
 }
 
 .chip {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   background: var(--glass-strong);
   border: 1px solid var(--stroke);
   border-radius: 999px;
-  padding: 4px 12px 4px 8px;
-  font-size: 12px;
+  padding: 3px 8px 3px 4px;
+  font-size: 11px;
   font-weight: 700;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  animation: chipIn 0.25s ease;
+  animation: chipIn 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
 }
 
 .chip .dot {
-  width: 18px; height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 10px; font-weight: 900;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 900;
   color: #08130c;
 }
 
 .chip .bar {
-  width: 46px; height: 4px;
+  width: 32px;
+  height: 3.5px;
   background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
 }
-.chip .bar i { display: block; height: 100%; border-radius: 4px; }
+.chip .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+.icon-btn, .hud-pause-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--stroke);
+  background: var(--glass);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.15s ease, background 0.2s ease;
+  display: grid;
+  place-items: center;
+}
+.icon-btn:hover, .hud-pause-btn:hover { background: rgba(255, 255, 255, 0.14); transform: scale(1.06); }
+.icon-btn:active, .hud-pause-btn:active { transform: scale(0.94); }
 
 /* ---------- Stage / canvas ---------- */
 #stage {
@@ -643,16 +773,7 @@ body.dpad-open #stage {
 .badge-card { display: flex; align-items: center; gap: 12px; cursor: default; }
 .badge-card .bd-icon { font-size: 26px; flex-shrink: 0; }
 
-#hudBar {
-  width: min(220px, 42vw);
-  height: 4px;
-  margin: 5px auto 0;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-  overflow: hidden;
-  transition: opacity 0.2s ease;
-}
-#hudBar i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 3px; }
+
 
 
 /* ---------- Buttons ---------- */
@@ -1407,23 +1528,28 @@ body.dpad-open #stage {
 
 @media (max-width: 520px) {
   #dpad { --dp: 58px; --dp-gap: 9px; }
+  #hud { padding: 6px 10px 2px; gap: 6px; }
+  .hud-score-card { min-width: 62px; padding: 3px 8px; border-radius: 11px; }
+  .hud-label { font-size: 8.5px; }
   .hud-value { font-size: 18px; }
-  .hud-chip { min-width: 64px; padding: 4px 10px; }
-  .hud-label { font-size: 9px; }
-  #hudStats { gap: 5px; }
-  .stat { padding: 2px 8px; }
-  .stat b { font-size: 13px; }
-  .icon-btn { width: 38px; height: 38px; flex-shrink: 0; }
-  #hudBar { width: min(150px, 32vw); }
+  .hud-best-chip { padding: 3px 6px; font-size: 10.5px; border-radius: 9px; }
+  .hud-stats { gap: 4px; min-height: 24px; }
+  .stat { padding: 2px 7px; border-radius: 9px; gap: 3px; }
+  .stat-icon { font-size: 10.5px; }
+  .stat b { font-size: 12.5px; }
+  .stat small { font-size: 8px; }
+  .hud-pause-btn { width: 34px; height: 34px; font-size: 11px; }
+  .hud-bar { width: min(130px, 30vw); height: 3px; }
+  .hud-combo { font-size: 11px; height: 14px; }
+  .chip { padding: 2px 6px 2px 3px; font-size: 10px; gap: 4px; }
+  .chip .dot { width: 14px; height: 14px; font-size: 8px; }
+  .chip .bar { width: 22px; height: 3px; }
   .title { font-size: clamp(34px, 10vw, 52px); }
   .tagline { letter-spacing: 0.2em; }
   .panel { padding: 20px 16px; gap: 12px; }
   .card-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .guide-content { max-height: 44vh; }
   .setting-row input[type="range"] { width: min(42vw, 130px); }
-  #hud { padding-top: 6px; padding-bottom: 2px; gap: 6px; }
-  .hud-chip { padding: 2px 9px; }
-  #chipBar { min-height: 22px; }
   .menu-container { width: min(360px, 94vw); gap: 9px; }
   .mode-card.hero-mode { padding: 10px 14px; }
   .mode-title { font-size: 14.5px; }
@@ -1438,15 +1564,20 @@ body.dpad-open #stage {
 
 /* Landscape mode: side-by-side hero + modes layout to prevent vertical squishing */
 @media (max-height: 520px) and (orientation: landscape) {
-  #hud { padding-top: 4px; padding-bottom: 0; }
-  .hud-chip { flex-direction: row; align-items: baseline; gap: 7px; min-width: 0; padding: 3px 10px; }
-  .hud-value { font-size: 15px; line-height: 1.2; }
-  .hud-label { font-size: 9px; }
-  #hudStats { min-height: 0; }
-  .stat { padding: 1px 7px; }
-  .stat b { font-size: 12px; }
-  .stat small { font-size: 8px; }
-  #chipBar { min-height: 26px; }
+  #hud { padding: 3px 10px 1px; gap: 6px; }
+  .hud-score-card { flex-direction: row; align-items: baseline; gap: 5px; min-width: 0; padding: 2px 8px; }
+  .hud-value { font-size: 15px; line-height: 1.1; }
+  .hud-label { font-size: 8.5px; }
+  .hud-best-chip { padding: 2px 6px; font-size: 10px; }
+  .hud-stats { min-height: 0; gap: 4px; }
+  .stat { padding: 2px 6px; font-size: 11px; }
+  .stat b { font-size: 11.5px; }
+  .stat small { font-size: 7.5px; }
+  .hud-combo { font-size: 10.5px; height: 13px; }
+  .hud-bar { height: 2.5px; }
+  .hud-pause-btn { width: 30px; height: 30px; font-size: 10px; }
+  .chip { padding: 2px 5px 2px 3px; font-size: 9.5px; }
+  .chip .bar { width: 18px; }
   body.dpad-open #stage {
     padding-bottom: 6px;
     padding-left: calc(3 * var(--dp) + 2 * var(--dp-gap) + 34px);
@@ -1536,7 +1667,7 @@ body.dpad-open #stage {
 
 /* Reduced transparency / low-end devices: drop expensive backdrop blurs */
 @media (prefers-reduced-transparency: reduce) {
-  .hud-chip, .stat, .icon-btn, .chip, .btn, .card, .toast,
+  .hud-score-card, .hud-best-chip, .hud-pause-btn, .hud-chip, .stat, .icon-btn, .chip, .btn, .card, .toast,
   .dp-btn, #joyBase, .screen.overlay, .modal, .setting-row select,
   .mode-card, .dock-btn, .menu-equipped-chip, .filter-tab {
     backdrop-filter: none !important;

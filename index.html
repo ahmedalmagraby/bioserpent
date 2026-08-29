@@ -10,30 +10,35 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=24">
-<link rel="stylesheet" href="css/animations.css?v=24">
+<link rel="stylesheet" href="css/main.css?v=25">
+<link rel="stylesheet" href="css/animations.css?v=25">
 
 </head>
 <body>
 <div id="app">
   <header id="hud" class="hidden">
-    <div class="hud-chip">
-      <span class="hud-label">Score</span>
-      <span id="hudScore" class="hud-value">0</span>
+    <div class="hud-zone hud-left">
+      <div class="hud-score-card">
+        <span class="hud-label">Score</span>
+        <span id="hudScore" class="hud-value">0</span>
+      </div>
+      <div class="hud-best-chip" id="hudBestChip" title="High Score">
+        <span class="hud-best-icon">👑</span>
+        <span id="hudBest" class="hud-best-val">0</span>
+      </div>
     </div>
-    <div id="hudCenter">
-      <div id="hudStats"></div>
-      <div id="hudCombo" class="hidden"></div>
-      <div id="hudBar" class="hidden"><i></i></div>
-    </div>
-    <div class="hud-chip right">
-      <span class="hud-label">Best</span>
-      <span id="hudBest" class="hud-value">0</span>
-    </div>
-    <button id="btnPause" class="icon-btn" aria-label="Pause">❚❚</button>
-  </header>
 
-  <div id="chipBar" class="hidden"></div>
+    <div class="hud-zone hud-center" id="hudCenter">
+      <div id="hudStats" class="hud-stats"></div>
+      <div id="hudCombo" class="hud-combo hidden"></div>
+      <div id="hudBar" class="hud-bar hidden"><i></i></div>
+    </div>
+
+    <div class="hud-zone hud-right">
+      <div id="chipBar" class="hud-buffs"></div>
+      <button id="btnPause" class="icon-btn hud-pause-btn" aria-label="Pause">❚❚</button>
+    </div>
+  </header>
 
   <main id="stage">
     <canvas id="game" role="img" aria-label="BioSerpent game board"></canvas>
@@ -357,19 +362,19 @@
 
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=24"></script>
-<script src="js/engine/gameLoop.js?v=24"></script>
-<script src="js/engine/inputManager.js?v=24"></script>
-<script src="js/engine/particleSystem.js?v=24"></script>
-<script src="js/audio/soundManager.js?v=24"></script>
-<script src="js/entities/snake.js?v=24"></script>
-<script src="js/entities/rival.js?v=24"></script>
-<script src="js/entities/food.js?v=24"></script>
-<script src="js/entities/powerups.js?v=24"></script>
-<script src="js/entities/obstacles.js?v=24"></script>
-<script src="js/levels/levelData.js?v=24"></script>
-<script src="js/ui/uiManager.js?v=24"></script>
-<script src="js/main.js?v=24"></script>
+<script src="js/engine/canvas.js?v=25"></script>
+<script src="js/engine/gameLoop.js?v=25"></script>
+<script src="js/engine/inputManager.js?v=25"></script>
+<script src="js/engine/particleSystem.js?v=25"></script>
+<script src="js/audio/soundManager.js?v=25"></script>
+<script src="js/entities/snake.js?v=25"></script>
+<script src="js/entities/rival.js?v=25"></script>
+<script src="js/entities/food.js?v=25"></script>
+<script src="js/entities/powerups.js?v=25"></script>
+<script src="js/entities/obstacles.js?v=25"></script>
+<script src="js/levels/levelData.js?v=25"></script>
+<script src="js/ui/uiManager.js?v=25"></script>
+<script src="js/main.js?v=25"></script>
 
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

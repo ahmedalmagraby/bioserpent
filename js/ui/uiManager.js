@@ -293,14 +293,24 @@ class UIManager {
 
   setHUD(vis) {
     this.el.hud.classList.toggle('hidden', !vis);
-    if (this.el.chipBar) this.el.chipBar.classList.toggle('hidden', !vis);
-    if (!vis) this.el.chipBar.innerHTML = '';
-    this.chips.clear();
+    if (!vis) {
+      if (this.el.chipBar) this.el.chipBar.innerHTML = '';
+      this.chips.clear();
+      this._lastScore = undefined;
+    }
   }
 
-
   updateHUD(d) {
-    if (d.score !== undefined) this.el.score.textContent = d.score;
+    if (d.score !== undefined) {
+      const prev = this._lastScore;
+      this._lastScore = d.score;
+      this.el.score.textContent = d.score;
+      if (prev !== undefined && d.score > prev) {
+        this.el.score.classList.remove('score-bump');
+        void this.el.score.offsetWidth;
+        this.el.score.classList.add('score-bump');
+      }
+    }
     if (d.best !== undefined) this.el.best.textContent = d.best;
     if (d.stats !== undefined) this.setStats(d.stats);
     if (d.combo !== undefined) {
@@ -341,6 +351,7 @@ class UIManager {
         this.chips.set(c.key, chip);
       }
       chip.bar.style.width = Math.max(0, Math.min(1, c.frac)) * 100 + '%';
+      chip.el.classList.toggle('buff-expiring', c.frac < 0.25);
     }
     for (const [key, chip] of this.chips) {
       if (!seen.has(key)) {
@@ -655,7 +666,11 @@ class UIManager {
   setStats(list) {
     let html = '';
     for (const s of list) {
-      html += `<span class="stat${s.cls ? ' ' + s.cls : ''}"><b>${s.v}</b><small>${s.l}</small></span>`;
+      const cls = s.cls ? ' ' + s.cls : '';
+      const titleAttr = s.title ? ` title="${s.title}"` : '';
+      const iconHtml = s.icon ? `<span class="stat-icon">${s.icon}</span>` : '';
+      const labelHtml = s.l ? `<small>${s.l}</small>` : '';
+      html += `<span class="stat${cls}"${titleAttr}>${iconHtml}<b>${s.v}</b>${labelHtml}</span>`;
     }
     if (html === this._statsHtml) return;
     this._statsHtml = html;
