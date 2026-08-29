@@ -57,7 +57,7 @@ const CONFIG = {
   powerupRatePerMs: 0.00007,
   insectRespawnMs: 2600,
   nearMissGain: 5,
-  nearMissDist: 1.6,
+  nearMissDist: 1,
   nearMissCooldownMs: 900,
   spawnMargin: 1,
   maxStepCatchup: 4,

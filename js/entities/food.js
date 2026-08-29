@@ -243,14 +243,14 @@ class FoodManager {
     };
   }
 
-  insectHit(px, py, cell) {
+  insectHit(x, y, cell) {
+    const gx = cell !== undefined ? (x / cell) - 0.5 : x;
+    const gy = cell !== undefined ? (y / cell) - 0.5 : y;
     for (let i = 0; i < this.insects.length; i++) {
       const n = this.insects[i];
       const p = this.insectPos(n);
-      const ix = (p.x + 0.5) * cell;
-      const iy = (p.y + 0.5) * cell;
-      const threshold = cell * (n.kind === 'dragonfly' ? 0.88 : 0.66);
-      if (Math.hypot(ix - px, iy - py) < threshold) {
+      const threshold = n.kind === 'dragonfly' ? 0.88 : 0.66;
+      if (Math.hypot(p.x - gx, p.y - gy) < threshold) {
         return this.insects.splice(i, 1)[0];
       }
     }

@@ -313,6 +313,7 @@ class InputManager {
     if (e.pointerId === this._burstId) {
       this._burstId = null;
       this.h.onBurst(false);
+      this.setBurstVisual(false);
     }
   }
 

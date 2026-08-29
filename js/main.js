@@ -325,7 +325,7 @@ class Game {
         if (bestDir) s.dir = bestDir;
       }
       const res = s.step({ wrap: true, cols: COLS, rows: liveRows(), ghost: false });
-      if (res.death || !res) {
+      if (!res || res.death) {
         this.resetDemo();
         break;
       }
@@ -872,8 +872,8 @@ class Game {
   consume(kind) {
     this.combo = Math.min(CONFIG.comboMax, (this.combo || 0) + 1);
     this.comboTimer = CONFIG.comboMs;
-    if (this.combo >= CONFIG.comboMax) {
-      this.save.stats.combos = Math.max(this.save.stats.combos || 0, CONFIG.comboMax);
+    if (this.combo > 1) {
+      this.save.stats.combos = Math.max(this.save.stats.combos || 0, this.combo);
     }
     const comboMult = this.combo > 1 ? 1 + (this.combo - 1) * CONFIG.comboStep : 1;
     const mult = (this.effects.multi > 0 ? 2 : 1) * comboMult;
@@ -917,8 +917,8 @@ class Game {
   consumeInsect(kind) {
     this.combo = Math.min(CONFIG.comboMax, (this.combo || 0) + 1);
     this.comboTimer = CONFIG.comboMs;
-    if (this.combo >= CONFIG.comboMax) {
-      this.save.stats.combos = Math.max(this.save.stats.combos || 0, CONFIG.comboMax);
+    if (this.combo > 1) {
+      this.save.stats.combos = Math.max(this.save.stats.combos || 0, this.combo);
     }
     const comboMult = this.combo > 1 ? 1 + (this.combo - 1) * CONFIG.comboStep : 1;
     const mult = (this.effects.multi > 0 ? 2 : 1) * comboMult;
@@ -984,10 +984,7 @@ class Game {
 
   maybeNewBest() {
     if (this.newBestShown || !this.run) return;
-    const best = this.mode === 'classic' ? this.save.best.classic
-      : this.mode === 'timeattack' ? this.save.best.timeattack
-      : this.mode === 'level' ? (this.save.levelBest[this.levelIdx] || 0)
-      : this.save.best.zen;
+    const best = this.currentBest();
     const metric = this.mode === 'zen' ? this.snake.length : this.run.score;
     if (best > 0 && metric > best) {
       this.newBestShown = true;
@@ -1124,9 +1121,7 @@ class Game {
       // First run of a new day: extend streak only if yesterday was played
       const y = new Date();
       y.setDate(y.getDate() - 1);
-      // Extend if yesterday was played; reset to 1 for a broken streak, or
-      // start at 0 on first-ever play so the counter semantically means "days maintained".
-      d.streak = d.lastPlayed === dayKey(y) ? (d.streak || 0) + 1 : (d.lastPlayed ? 1 : 0);
+      d.streak = d.lastPlayed === dayKey(y) ? (d.streak || 0) + 1 : 1;
       d.key = today;
       d.best = 0;
     }
@@ -1285,7 +1280,7 @@ class Game {
       if (item.type === 'egg') this.consumeEgg();
       else this.consume(item.type === 'apple' ? 'apple' : 'golden');
     }
-    const ins = this.food.insectHit(this.view.cx(h.x), this.view.cy(h.y), this.view.cell);
+    const ins = this.food.insectHit(h.x, h.y);
     if (ins) this.consumeInsect(ins.kind);
     this._pan = (this.view.cx(h.x) / this.view.w) * 2 - 1;
     const pw = this.powerups.collide(h.x, h.y);
@@ -1450,6 +1445,9 @@ class Game {
             this.food.spawnApple((x, y) => this.isFreeCell(x, y));
           }
         }
+      }
+      if (this.rival) {
+        this.rival.tick(dt, this.food.items.find(i => i.type === 'apple') || null);
       }
     }
     if (this.state === 'menu') {
@@ -1835,6 +1833,7 @@ const ui = new UIManager({
       game.save = {
         best: Object.assign(d.best, obj.best),
         daily: Object.assign(d.daily, obj.daily || {}),
+        history: obj.history || {},
         levelBest: obj.levelBest || {},
         stars: obj.stars || {},
         settings: Object.assign(d.settings, obj.settings),
@@ -1902,7 +1901,7 @@ const input = new InputManager(stage, {
   },
   onRestartKey() {
     if (game.state === 'over' || game.state === 'paused') {
-      if (game.mode === 'zen' && game.run) {
+      if (game.mode === 'zen' && game.run && game.state === 'paused') {
         game.save.stats.games++;
         game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
         if (game.snake.length > game.save.best.zen) {
