@@ -801,7 +801,7 @@ class Game {
       streak: this.save.daily.streak || 0,
       playedToday: this.save.daily.key === today
     };
-    this.ui.updateMenuSubLabels(this.save.best, this.sumStars(), LEVELS.length * 3, { daily });
+    this.ui.updateMenuSubLabels(this.save.best, this.sumStars(), LEVELS.length * 3, { daily, badgesCount: this.save.badges.length }, this.save.skin);
     this.ui.setMenuStats(
       `🐍 Classic <b>${this.save.best.classic}</b><span>·</span>⏱ Attack <b>${this.save.best.timeattack}</b>` +
       `<span>·</span>🪷 Zen <b>${this.save.best.zen}</b><span>·</span>🍎 <b>${s.apples}</b>` +
@@ -1754,6 +1754,7 @@ const ui = new UIManager({
     game.save.skin = id;
     game.persist();
     ui.buildSkins(sid => game.isSkinUnlocked(sid), game.save.skin, game.save);
+    game.refreshMenuStats();
     ui.toast(`🐍 Skin selected: <b>${SKINS.find(s => s.id === id).name}</b>`, 'hint');
   },
   onPauseButton() { game.togglePause(); },

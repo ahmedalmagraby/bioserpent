@@ -45,6 +45,18 @@
 }
 .btn.primary { animation: glowPulse 3.2s ease-in-out infinite; }
 
+@keyframes heroGlowPulse {
+  0%, 100% { box-shadow: 0 6px 24px rgba(62, 201, 122, 0.16); }
+  50% { box-shadow: 0 8px 32px rgba(62, 201, 122, 0.35); }
+}
+.mode-card.hero-mode { animation: heroGlowPulse 4s ease-in-out infinite; }
+
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card { animation: cardFadeIn 0.22s ease-out; }
+
 @keyframes titleFloat {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
@@ -67,6 +79,8 @@
 @media (prefers-reduced-motion: reduce) {
   .title,
   .btn.primary,
+  .mode-card.hero-mode,
+  .card,
   #hudCombo.pulse,
   .pop-in,
   .toast,
@@ -77,4 +91,5 @@
     animation: none !important;
   }
 }
+
 

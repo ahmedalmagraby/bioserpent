@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=22">
-<link rel="stylesheet" href="css/animations.css?v=22">
+<link rel="stylesheet" href="css/main.css?v=24">
+<link rel="stylesheet" href="css/animations.css?v=24">
 
 </head>
 <body>
@@ -50,58 +50,159 @@
   </main>
 
   <section id="screen-menu" class="screen">
-    <h1 class="title">Bio<span>Serpent</span></h1>
-    <p class="tagline">a biomimetic organic snake garden</p>
-    <nav class="menu-buttons">
-      <button id="btnClassic" class="btn primary mode-btn">
-        <span class="btn-title">🐍 Classic Run</span>
-        <span id="subClassic" class="btn-sub">Best: 0</span>
-      </button>
-      <button id="btnLevels" class="btn mode-btn">
-        <span class="btn-title">🌿 Level Garden</span>
-        <span id="subLevels" class="btn-sub">0 / 36 ★</span>
-      </button>
-      <button id="btnTimeAttack" class="btn mode-btn">
-        <span class="btn-title">⏱ Time Attack</span>
-        <span id="subTimeAttack" class="btn-sub">Best: 0</span>
-      </button>
-      <button id="btnZen" class="btn mode-btn">
-        <span class="btn-title">🪷 Zen Flow</span>
-        <span id="subZen" class="btn-sub">Best Length: 0</span>
-      </button>
-      <button id="btnDaily" class="btn mode-btn daily">
-        <span class="btn-title">📅 Daily Challenge</span>
-        <span id="subDaily" class="btn-sub"></span>
-      </button>
-      <div class="menu-row">
-        <button id="btnSkins" class="btn small">🎨 Skins</button>
-        <button id="btnBadges" class="btn small">🏅 Badges</button>
-        <button id="btnGuide" class="btn small">📖 Guide</button>
-        <button id="btnSettings" class="btn small">⚙️ Settings</button>
+    <div class="menu-container">
+      <div class="menu-header">
+        <h1 class="title">Bio<span>Serpent</span></h1>
+        <p class="tagline">a biomimetic organic snake garden</p>
+        <button id="menuSkinPreviewBtn" class="menu-equipped-chip" title="Click to customize skin">
+          <canvas id="menuSkinCanvas" width="60" height="38"></canvas>
+          <div class="menu-equipped-info">
+            <span class="menu-equipped-label">Species</span>
+            <span id="menuSkinName" class="menu-equipped-name">Emerald</span>
+          </div>
+          <span class="menu-equipped-action">🎨 Skin Locker ❯</span>
+        </button>
       </div>
-    </nav>
-    <div id="menuStats" class="menu-stats glass" title="Click to view Badges"></div>
+
+      <nav class="menu-modes">
+        <!-- Hero Mode Card -->
+        <button id="btnClassic" class="mode-card hero-mode" aria-label="Play Classic Run">
+          <div class="mode-card-left">
+            <span class="mode-badge-pill">Standard Survival</span>
+            <span class="mode-title">🐍 Classic Run</span>
+            <span class="mode-desc">Pure organic survival · Combos & speed bursts</span>
+          </div>
+          <div class="mode-card-right">
+            <span class="mode-stat-label">Best</span>
+            <span id="subClassic" class="mode-stat-val">0</span>
+            <span class="mode-play-icon">▶</span>
+          </div>
+        </button>
+
+        <!-- 2x2 Game Modes Grid -->
+        <div class="mode-grid">
+          <button id="btnLevels" class="mode-card biome-card" aria-label="Play Level Garden">
+            <div class="mode-card-head">
+              <span class="mode-icon">🌿</span>
+              <span class="mode-badge" id="subLevels">0 / 36 ★</span>
+            </div>
+            <span class="mode-title">Level Garden</span>
+            <span class="mode-desc">4 biomes · 12 puzzle trials</span>
+          </button>
+
+          <button id="btnDaily" class="mode-card daily-card" aria-label="Play Daily Challenge">
+            <div class="mode-card-head">
+              <span class="mode-icon">📅</span>
+              <span id="badgeDailyStreak" class="mode-badge gold">Daily</span>
+            </div>
+            <span class="mode-title">Daily Challenge</span>
+            <span id="subDaily" class="mode-desc">Unique daily modifiers</span>
+          </button>
+
+          <button id="btnTimeAttack" class="mode-card time-card" aria-label="Play Time Attack">
+            <div class="mode-card-head">
+              <span class="mode-icon">⏱</span>
+              <span class="mode-stat-chip">Best: <b id="subTimeAttack">0</b></span>
+            </div>
+            <span class="mode-title">Time Attack</span>
+            <span class="mode-desc">60s sprint · frenzy scoring</span>
+          </button>
+
+          <button id="btnZen" class="mode-card zen-card" aria-label="Play Zen Flow">
+            <div class="mode-card-head">
+              <span class="mode-icon">🪷</span>
+              <span class="mode-stat-chip">Max: <b id="subZen">0</b></span>
+            </div>
+            <span class="mode-title">Zen Flow</span>
+            <span class="mode-desc">No death · infinite flow</span>
+          </button>
+        </div>
+
+        <!-- Quick Access Dock -->
+        <div class="menu-dock">
+          <button id="btnSkins" class="dock-btn" aria-label="Skins Locker">
+            <span class="dock-icon">🎨</span>
+            <span class="dock-label">Skins</span>
+          </button>
+          <button id="btnBadges" class="dock-btn" aria-label="Achievements Badges">
+            <span class="dock-icon">🏅</span>
+            <span class="dock-label">Badges</span>
+            <span id="dockBadgeCount" class="dock-counter">0/11</span>
+          </button>
+          <button id="btnGuide" class="dock-btn" aria-label="Field Guide">
+            <span class="dock-icon">📖</span>
+            <span class="dock-label">Guide</span>
+          </button>
+          <button id="btnSettings" class="dock-btn" aria-label="Settings">
+            <span class="dock-icon">⚙️</span>
+            <span class="dock-label">Settings</span>
+          </button>
+        </div>
+      </nav>
+
+      <div id="menuStats" class="menu-stats glass" title="Click to view Badges"></div>
+    </div>
   </section>
 
   <section id="screen-levels" class="screen hidden">
-    <h2 class="screen-title">Level Garden</h2>
-    <p class="screen-sub">Four biomes · twelve handcrafted challenges</p>
+    <div class="screen-header">
+      <h2 class="screen-title">Level Garden</h2>
+      <p class="screen-sub">Four distinct biomes · twelve handcrafted challenges</p>
+    </div>
+    <div class="filter-tabs" id="levelBiomeTabs">
+      <button class="filter-tab active" data-biome="all">All Biomes</button>
+      <button class="filter-tab" data-biome="rainforest">🌧 Rainforest</button>
+      <button class="filter-tab" data-biome="oasis">☀️ Oasis</button>
+      <button class="filter-tab" data-biome="cavern">💎 Cavern</button>
+      <button class="filter-tab" data-biome="reef">🌊 Reef</button>
+    </div>
     <div id="levelGrid" class="card-grid"></div>
-    <button class="btn small back-btn" data-back="menu">← Back</button>
+    <button class="btn small back-btn" data-back="menu">← Back to Menu</button>
   </section>
 
   <section id="screen-skins" class="screen hidden">
-    <h2 class="screen-title">Skin Locker</h2>
-    <p class="screen-sub">Unlock species by playing</p>
+    <div class="screen-header">
+      <h2 class="screen-title">Skin Locker</h2>
+      <p class="screen-sub">Unlock unique species and elemental body patterns</p>
+    </div>
+    <div id="skinHeroPreview" class="skin-hero-box glass">
+      <canvas id="skinHeroCanvas" width="100" height="56"></canvas>
+      <div class="skin-hero-info">
+        <span class="skin-hero-badge">Currently Equipped</span>
+        <h3 id="skinHeroName" class="skin-hero-title">Emerald</h3>
+        <p id="skinHeroDesc" class="skin-hero-desc">Classic biomimetic viper scales</p>
+      </div>
+    </div>
+    <div class="filter-tabs" id="skinFilterTabs">
+      <button class="filter-tab active" data-filter="all">All Species</button>
+      <button class="filter-tab" data-filter="unlocked">Unlocked</button>
+      <button class="filter-tab" data-filter="locked">Locked</button>
+    </div>
     <div id="skinGrid" class="card-grid skins"></div>
-    <button class="btn small back-btn" data-back="menu">← Back</button>
+    <button class="btn small back-btn" data-back="menu">← Back to Menu</button>
   </section>
 
   <section id="screen-badges" class="screen hidden">
-    <h2 class="screen-title">Badges</h2>
-    <p class="screen-sub">Feats of serpentine skill</p>
+    <div class="screen-header">
+      <h2 class="screen-title">Badges & Mastery</h2>
+      <p class="screen-sub">Feats of serpentine skill, survival, and discovery</p>
+    </div>
+    <div class="badges-progress-card glass">
+      <div class="badge-prog-header">
+        <span>Completion Progress</span>
+        <span id="badgeProgText">0 / 11 (0%)</span>
+      </div>
+      <div class="prog-track wide">
+        <div id="badgeProgBar" class="prog-fill" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="filter-tabs" id="badgeFilterTabs">
+      <button class="filter-tab active" data-filter="all">All Badges</button>
+      <button class="filter-tab" data-filter="earned">Earned</button>
+      <button class="filter-tab" data-filter="locked">Locked</button>
+    </div>
     <div id="badgeGrid" class="card-grid"></div>
-    <button class="btn small back-btn" data-back="menu">← Back</button>
+    <button class="btn small back-btn" data-back="menu">← Back to Menu</button>
   </section>
 
   <section id="screen-pause" class="screen overlay hidden">
@@ -157,66 +258,86 @@
         <button class="guide-tab" data-tab="tips">🎮 Controls</button>
       </div>
       <div id="guideContent" class="guide-content">
-        <!-- populated dynamically or statically -->
+        <!-- populated dynamically -->
       </div>
       <button id="btnCloseGuide" class="btn primary small">Got it</button>
     </div>
   </div>
 
   <div id="modal-settings" class="modal hidden">
-    <div class="panel glass pop-in">
-      <h2>Settings</h2>
-      <label class="setting-row">
-        <span>🎵 Music</span>
-        <input type="range" id="setMusic" min="0" max="100" value="70">
-      </label>
-      <label class="setting-row">
-        <span>🔊 Sound FX</span>
-        <input type="range" id="setSfx" min="0" max="100" value="90">
-      </label>
-      <label class="setting-row check">
-        <input type="checkbox" id="setMute">
-        <span>🔇 Mute everything</span>
-      </label>
-      <label class="setting-row">
-        <span>📱 Touch controls</span>
-        <select id="setTouch">
-          <option value="auto">Auto</option>
-          <option value="swipe">Swipe gestures</option>
-          <option value="joystick">Floating joystick</option>
-          <option value="dpad">On-screen D-pad</option>
-          <option value="keys">Keyboard only</option>
-        </select>
-      </label>
-      <label class="setting-row">
-        <span>🧱 Walls mode</span>
-        <select id="setWalls">
-          <option value="solid">Solid — crash on walls</option>
-          <option value="wrap">Wrap — slide through edges</option>
-        </select>
-      </label>
-      <label class="setting-row check">
-        <input type="checkbox" id="setShake">
-        <span>📳 Screen shake</span>
-      </label>
-      <label class="setting-row check">
-        <input type="checkbox" id="setFlash">
-        <span>💡 Flash effects</span>
-      </label>
-      <label class="setting-row check">
-        <input type="checkbox" id="setRival">
-        <span>🐍 Rival serpent (Classic Run)</span>
-      </label>
-      <p class="setting-sub-hint">Walls wrap mode only applies to Classic Run.</p>
-      <p class="hint">Desktop: Arrows / WASD steer · hold Shift for speed burst · Space pauses · M mute</p>
-      <div class="stack row">
-        <button id="btnExportSave" class="btn small">⬆ Export save</button>
-        <button id="btnImportSave" class="btn small">⬇ Import save</button>
+    <div class="panel glass pop-in settings-panel">
+      <div class="modal-head">
+        <h2>⚙️ Settings</h2>
+        <p class="modal-sub">Audio, controls, visuals and data management</p>
       </div>
-      <div class="stack row">
-        <button id="btnResetProgress" class="btn danger small">Reset progress</button>
-        <button id="btnCloseSettings" class="btn primary small">Done</button>
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="audio">🎵 Audio</button>
+        <button class="settings-tab" data-tab="controls">🎮 Controls</button>
+        <button class="settings-tab" data-tab="visuals">✨ Visuals</button>
+        <button class="settings-tab" data-tab="data">💾 Data</button>
       </div>
+      <div class="settings-content">
+        <div class="settings-pane active" id="pane-audio">
+          <label class="setting-row">
+            <span>🎵 Music Volume</span>
+            <input type="range" id="setMusic" min="0" max="100" value="70">
+          </label>
+          <label class="setting-row">
+            <span>🔊 Sound FX</span>
+            <input type="range" id="setSfx" min="0" max="100" value="90">
+          </label>
+          <label class="setting-row check">
+            <input type="checkbox" id="setMute">
+            <span>🔇 Mute all audio</span>
+          </label>
+        </div>
+        <div class="settings-pane hidden" id="pane-controls">
+          <label class="setting-row">
+            <span>📱 Touch Controls</span>
+            <select id="setTouch">
+              <option value="auto">Auto</option>
+              <option value="swipe">Swipe gestures</option>
+              <option value="joystick">Floating joystick</option>
+              <option value="dpad">On-screen D-pad</option>
+              <option value="keys">Keyboard only</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>🧱 Walls Mode</span>
+            <select id="setWalls">
+              <option value="solid">Solid — crash on walls</option>
+              <option value="wrap">Wrap — slide through edges</option>
+            </select>
+          </label>
+          <p class="setting-sub-hint">Walls wrap mode only applies to Classic Run.</p>
+          <label class="setting-row check">
+            <input type="checkbox" id="setRival">
+            <span>🐍 Rival Serpent (Classic Run)</span>
+          </label>
+          <p class="hint">Desktop: Arrows / WASD steer · Hold Shift for speed burst · Space pauses · M mute</p>
+        </div>
+        <div class="settings-pane hidden" id="pane-visuals">
+          <label class="setting-row check">
+            <input type="checkbox" id="setShake">
+            <span>📳 Screen Shake</span>
+          </label>
+          <label class="setting-row check">
+            <input type="checkbox" id="setFlash">
+            <span>💡 Flash Effects</span>
+          </label>
+        </div>
+        <div class="settings-pane hidden" id="pane-data">
+          <p class="modal-hint">Export your JSON progress or restore from a backup.</p>
+          <div class="stack row">
+            <button id="btnExportSave" class="btn small">⬆ Export Save</button>
+            <button id="btnImportSave" class="btn small">⬇ Import Save</button>
+          </div>
+          <div class="stack row" style="margin-top: 8px;">
+            <button id="btnResetProgress" class="btn danger small">Reset All Progress</button>
+          </div>
+        </div>
+      </div>
+      <button id="btnCloseSettings" class="btn primary small" style="margin-top: 6px; width: 100%;">Done</button>
     </div>
   </div>
 
@@ -236,19 +357,19 @@
 
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=22"></script>
-<script src="js/engine/gameLoop.js?v=22"></script>
-<script src="js/engine/inputManager.js?v=22"></script>
-<script src="js/engine/particleSystem.js?v=22"></script>
-<script src="js/audio/soundManager.js?v=23"></script>
-<script src="js/entities/snake.js?v=22"></script>
-<script src="js/entities/rival.js?v=22"></script>
-<script src="js/entities/food.js?v=22"></script>
-<script src="js/entities/powerups.js?v=22"></script>
-<script src="js/entities/obstacles.js?v=22"></script>
-<script src="js/levels/levelData.js?v=22"></script>
-<script src="js/ui/uiManager.js?v=22"></script>
-<script src="js/main.js?v=22"></script>
+<script src="js/engine/canvas.js?v=24"></script>
+<script src="js/engine/gameLoop.js?v=24"></script>
+<script src="js/engine/inputManager.js?v=24"></script>
+<script src="js/engine/particleSystem.js?v=24"></script>
+<script src="js/audio/soundManager.js?v=24"></script>
+<script src="js/entities/snake.js?v=24"></script>
+<script src="js/entities/rival.js?v=24"></script>
+<script src="js/entities/food.js?v=24"></script>
+<script src="js/entities/powerups.js?v=24"></script>
+<script src="js/entities/obstacles.js?v=24"></script>
+<script src="js/levels/levelData.js?v=24"></script>
+<script src="js/ui/uiManager.js?v=24"></script>
+<script src="js/main.js?v=24"></script>
 
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

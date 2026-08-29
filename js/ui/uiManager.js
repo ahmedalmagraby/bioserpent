@@ -20,6 +20,19 @@ class UIManager {
       skinGrid: this.$('skinGrid'),
       badgeGrid: this.$('badgeGrid'),
       menuStats: this.$('menuStats'),
+      menuSkinCanvas: this.$('menuSkinCanvas'),
+      menuSkinName: this.$('menuSkinName'),
+      menuSkinPreviewBtn: this.$('menuSkinPreviewBtn'),
+      badgeDailyStreak: this.$('badgeDailyStreak'),
+      dockBadgeCount: this.$('dockBadgeCount'),
+      levelBiomeTabs: this.$('levelBiomeTabs'),
+      skinHeroCanvas: this.$('skinHeroCanvas'),
+      skinHeroName: this.$('skinHeroName'),
+      skinHeroDesc: this.$('skinHeroDesc'),
+      skinFilterTabs: this.$('skinFilterTabs'),
+      badgeFilterTabs: this.$('badgeFilterTabs'),
+      badgeProgText: this.$('badgeProgText'),
+      badgeProgBar: this.$('badgeProgBar'),
       hudBar: this.$('hudBar'),
       overTitle: this.$('overTitle'),
       overMode: this.$('overMode'),
@@ -61,6 +74,7 @@ class UIManager {
     this._wire(this.$('btnZen'), () => this.h.onZen());
     this._wire(this.$('btnDaily'), () => this.h.onDaily());
     this._wire(this.$('btnSkins'), () => this.h.onSkins());
+    if (this.el.menuSkinPreviewBtn) this._wire(this.el.menuSkinPreviewBtn, () => this.h.onSkins());
     this._wire(this.$('btnBadges'), () => this.h.onOpenBadges());
     this._wire(this.$('btnSettings'), () => this.h.onOpenSettings());
     this._wire(this.$('btnGuide'), () => this.openGuide());
@@ -104,6 +118,61 @@ class UIManager {
     const modalSettings = this.$('modal-settings');
     modalSettings.addEventListener('pointerdown', e => {
       if (e.target === modalSettings) this.h.onCloseSettings();
+    });
+
+    // Settings tabs
+    document.querySelectorAll('.settings-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        this.h.onClick();
+        this.setSettingsTab(tabBtn.dataset.tab);
+      });
+    });
+
+    // Level Garden Biome tabs
+    document.querySelectorAll('#levelBiomeTabs .filter-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        this.h.onClick();
+        document.querySelectorAll('#levelBiomeTabs .filter-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
+        if (this._lastLevelsArgs) {
+          this.buildLevels(this._lastLevelsArgs[0], this._lastLevelsArgs[1], this._lastLevelsArgs[2], this._lastLevelsArgs[3], tabBtn.dataset.biome);
+        }
+      });
+    });
+
+    // Skin Locker Filter tabs
+    document.querySelectorAll('#skinFilterTabs .filter-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        this.h.onClick();
+        document.querySelectorAll('#skinFilterTabs .filter-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
+        if (this._lastSkinsArgs) {
+          this.buildSkins(this._lastSkinsArgs[0], this._lastSkinsArgs[1], this._lastSkinsArgs[2], tabBtn.dataset.filter);
+        }
+      });
+    });
+
+    // Badges Filter tabs
+    document.querySelectorAll('#badgeFilterTabs .filter-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        this.h.onClick();
+        document.querySelectorAll('#badgeFilterTabs .filter-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
+        if (this._lastBadgesArgs) {
+          this.buildBadges(this._lastBadgesArgs[0], this._lastBadgesArgs[1], this._lastBadgesArgs[2], tabBtn.dataset.filter);
+        }
+      });
+    });
+
+    // Global Keyboard navigation
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (this.isSaveModalOpen()) { this.closeSaveModal(); return; }
+        if (this.isGuideOpen()) { this.closeGuide(); return; }
+        if (this.isSettingsOpen()) { this.closeSettingsModal(); return; }
+        const activeScreen = Object.keys(this.screens).find(k => k !== 'menu' && !this.screens[k].classList.contains('hidden'));
+        if (activeScreen === 'levels' || activeScreen === 'skins' || activeScreen === 'badges') {
+          this.h.onClick();
+          this.h.onBack('menu');
+        }
+      }
     });
 
     const modalSave = this.$('modal-save');
@@ -292,42 +361,74 @@ class UIManager {
     setTimeout(() => t.remove(), 4000);
   }
 
-  buildLevels(levels, isUnlocked, starsFor, bestFor) {
+  buildLevels(levels, isUnlocked, starsFor, bestFor, filterBiome = 'all') {
+    this._lastLevelsArgs = [levels, isUnlocked, starsFor, bestFor];
     this.el.levelGrid.innerHTML = '';
-    levels.forEach((lv, i) => {
-      const unlocked = isUnlocked(i);
-      const card = document.createElement('button');
-      card.className = 'card' + (unlocked ? '' : ' locked');
-      const st = starsFor(i);
-      let starsHtml = '';
-      for (let k = 0; k < 3; k++) starsHtml += `<span class="${k < st ? '' : 'off'}">★</span>`;
-      const best = bestFor ? bestFor(i) : 0;
-      const threshHtml = `<div class="lv-thresholds"><span>★ ${lv.stars[0]}</span><span>★★ ${lv.stars[1]}</span><span>★★★ ${lv.stars[2]}</span></div>`;
-      const reqHtml = unlocked ? '' : `<div class="lv-unlock-req">🔒 Complete Level ${i} first</div>`;
-      card.innerHTML = `
-        <div class="lv-num">LEVEL ${String(i + 1).padStart(2, '0')}</div>
-        <div class="lv-name">${lv.name}</div>
-        <div class="lv-biome" style="color:${{ rainforest: '#57a05a', oasis: '#d9a95f', cavern: '#6ee7f0', reef: '#54c2d8' }[lv.biome]}">${lv.blurb}</div>
-        <div class="lv-goal">🍎 ${lv.goalApples} to win · Best ${best > 0 ? best : '—'}</div>
-        ${threshHtml}
-        <div class="lv-stars">${starsHtml}</div>
-        ${reqHtml}
-        ${unlocked ? '' : '<div class="lv-lock">🔒</div>'}`;
-      if (unlocked) card.addEventListener('click', () => { card.blur(); this.h.onClick(); this.h.onSelectLevel(i); });
-      else card.title = `Earn a star on Level ${i} to unlock`;
-      this.el.levelGrid.appendChild(card);
+
+    const BIOME_META = {
+      rainforest: { name: '🌿 Emerald Rainforest', color: '#57a05a' },
+      oasis: { name: '☀️ Golden Oasis', color: '#d9a95f' },
+      cavern: { name: '💎 Bioluminescent Cavern', color: '#6ee7f0' },
+      reef: { name: '🌊 Abyssal Reef', color: '#54c2d8' }
+    };
+
+    const biomes = filterBiome === 'all' ? ['rainforest', 'oasis', 'cavern', 'reef'] : [filterBiome];
+
+    biomes.forEach(biomeKey => {
+      const meta = BIOME_META[biomeKey];
+      const biomeLevels = levels.map((lv, i) => ({ lv, i })).filter(item => item.lv.biome === biomeKey);
+      if (!biomeLevels.length) return;
+
+      if (filterBiome === 'all') {
+        const earnedBiomeStars = biomeLevels.reduce((sum, item) => sum + starsFor(item.i), 0);
+        const totalBiomeStars = biomeLevels.length * 3;
+        const head = document.createElement('div');
+        head.className = 'biome-header';
+        head.style.borderColor = meta.color + '44';
+        head.innerHTML = `<span style="color:${meta.color}">${meta.name}</span><span>${earnedBiomeStars} / ${totalBiomeStars} ★</span>`;
+        this.el.levelGrid.appendChild(head);
+      }
+
+      biomeLevels.forEach(({ lv, i }) => {
+        const unlocked = isUnlocked(i);
+        const card = document.createElement('button');
+        card.className = 'card' + (unlocked ? '' : ' locked');
+        const st = starsFor(i);
+        let starsHtml = '';
+        for (let k = 0; k < 3; k++) starsHtml += `<span class="${k < st ? '' : 'off'}">★</span>`;
+        const best = bestFor ? bestFor(i) : 0;
+        const threshHtml = `<div class="lv-thresholds"><span>★ ${lv.stars[0]}</span><span>★★ ${lv.stars[1]}</span><span>★★★ ${lv.stars[2]}</span></div>`;
+        const reqHtml = unlocked ? '' : `<div class="lv-unlock-req">🔒 Complete Level ${i} first</div>`;
+        card.innerHTML = `
+          <div class="lv-num">LEVEL ${String(i + 1).padStart(2, '0')}</div>
+          <div class="lv-name">${lv.name}</div>
+          <div class="lv-biome" style="color:${meta.color}">${lv.blurb}</div>
+          <div class="lv-goal">🍎 ${lv.goalApples} to win · Best ${best > 0 ? best : '—'}</div>
+          ${threshHtml}
+          <div class="lv-stars">${starsHtml}</div>
+          ${reqHtml}
+          ${unlocked ? '' : '<div class="lv-lock">🔒</div>'}`;
+        if (unlocked) card.addEventListener('click', () => { card.blur(); this.h.onClick(); this.h.onSelectLevel(i); });
+        else card.title = `Earn a star on Level ${i} to unlock`;
+        this.el.levelGrid.appendChild(card);
+      });
     });
   }
 
-  buildBadges(defs, isEarned, save) {
+  buildBadges(defs, isEarned, save, filterType = 'all') {
+    this._lastBadgesArgs = [defs, isEarned, save];
     this.el.badgeGrid.innerHTML = '';
     const earnedCount = defs.filter(d => isEarned(d.id)).length;
-    const head = document.createElement('div');
-    head.className = 'badge-summary';
-    head.textContent = `${earnedCount} / ${defs.length} earned`;
-    this.el.badgeGrid.appendChild(head);
+    const pct = Math.round((earnedCount / defs.length) * 100);
+
+    if (this.el.badgeProgText) this.el.badgeProgText.textContent = `${earnedCount} / ${defs.length} (${pct}%)`;
+    if (this.el.badgeProgBar) this.el.badgeProgBar.style.width = `${pct}%`;
+
     for (const b of defs) {
       const earned = isEarned(b.id);
+      if (filterType === 'earned' && !earned) continue;
+      if (filterType === 'locked' && earned) continue;
+
       const card = document.createElement('div');
       card.className = 'card badge-card' + (earned ? '' : ' locked');
       let progHtml = '';
@@ -358,15 +459,27 @@ class UIManager {
     }
   }
 
-  buildSkins(isUnlocked, currentId, save) {
+  buildSkins(isUnlocked, currentId, save, filterType = 'all') {
+    this._lastSkinsArgs = [isUnlocked, currentId, save];
     this.el.skinGrid.innerHTML = '';
+
+    const curSkin = SKINS.find(s => s.id === currentId) || SKINS[0];
+    if (this.el.skinHeroCanvas && curSkin) drawSkinPreview(this.el.skinHeroCanvas, curSkin);
+    if (this.el.skinHeroName && curSkin) this.el.skinHeroName.textContent = curSkin.name;
+    if (this.el.skinHeroDesc && curSkin) {
+      this.el.skinHeroDesc.textContent = curSkin.desc || (curSkin.trail ? '✨ Emits elemental particle trail while moving' : 'Biomimetic scales & organic cellular pattern');
+    }
+
     for (const skin of SKINS) {
       const unlocked = isUnlocked(skin.id);
+      if (filterType === 'unlocked' && !unlocked) continue;
+      if (filterType === 'locked' && unlocked) continue;
+
       const card = document.createElement('button');
       card.className = 'card skin-card' + (unlocked ? '' : ' locked') + (skin.id === currentId ? ' selected' : '');
       const cv = document.createElement('canvas');
       card.appendChild(cv);
-      let hintText = unlocked ? (skin.trail ? '✨ Particle trail' : '✔ Unlocked') : '🔒 ' + skin.hint;
+      let hintText = unlocked ? (skin.trail ? '✨ Particle trail' : (skin.id === currentId ? '★ Equipped' : '✔ Unlocked')) : '🔒 ' + skin.hint;
       let progHtml = '';
       if (!unlocked && skin.unlock && save) {
         const u = skin.unlock;
@@ -404,23 +517,45 @@ class UIManager {
     if (rivalEl) rivalEl.checked = !!s.rival;
   }
 
-  updateMenuSubLabels(bests, starsSum, totalStars = 36, extra = null) {
-    if (this.el.subClassic) this.el.subClassic.textContent = `Best: ${bests.classic || 0}`;
+  setSettingsTab(tab) {
+    document.querySelectorAll('.settings-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    document.querySelectorAll('.settings-pane').forEach(p => {
+      p.classList.toggle('hidden', p.id !== `pane-${tab}`);
+    });
+  }
+
+  updateMenuSubLabels(bests, starsSum, totalStars = 36, extra = null, currentSkinId = 'emerald') {
+    if (this.el.subClassic) this.el.subClassic.textContent = `${bests.classic || 0}`;
     if (this.el.subLevels) this.el.subLevels.textContent = `${starsSum || 0} / ${totalStars} ★`;
-    if (this.el.subTimeAttack) this.el.subTimeAttack.textContent = `Best: ${bests.timeattack || 0}`;
-    if (this.el.subZen) this.el.subZen.textContent = `Best Length: ${bests.zen || 0}`;
+    if (this.el.subTimeAttack) this.el.subTimeAttack.textContent = `${bests.timeattack || 0}`;
+    if (this.el.subZen) this.el.subZen.textContent = `${bests.zen || 0}`;
     if (this.el.subDaily && extra && extra.daily) {
-      const parts = [`Today's Best: ${extra.daily.best || 0}`];
-      // BUG-11: show streak badge from day 1 (>= 1) instead of day 3 (> 1)
-      if (extra.daily.streak >= 1) parts.push(`🔥 ${extra.daily.streak}-day streak`);
-      else if (!extra.daily.playedToday) parts.push('New challenge!');
-      this.el.subDaily.textContent = parts.join(' · ');
+      if (extra.daily.playedToday) {
+        this.el.subDaily.textContent = `Completed · Best: ${extra.daily.best || 0}`;
+      } else if (extra.daily.best > 0) {
+        this.el.subDaily.textContent = `Best: ${extra.daily.best} · Try again!`;
+      } else {
+        this.el.subDaily.textContent = `New challenge active!`;
+      }
+      if (this.el.badgeDailyStreak) {
+        this.el.badgeDailyStreak.textContent = extra.daily.streak >= 1 ? `🔥 ${extra.daily.streak}d` : 'Daily';
+      }
     }
-    // BUG-12: toggle 'new-daily' on the daily button so the CSS ::after "NEW" badge
-    // only renders when the daily hasn't been played today.
     const btnDaily = this.$('btnDaily');
     if (btnDaily && extra && extra.daily) {
       btnDaily.classList.toggle('new-daily', !extra.daily.playedToday);
+    }
+    if (extra && extra.badgesCount !== undefined && this.el.dockBadgeCount) {
+      this.el.dockBadgeCount.textContent = `${extra.badgesCount}/11`;
+    }
+    const skin = SKINS.find(s => s.id === currentSkinId) || SKINS[0];
+    if (this.el.menuSkinName && skin) {
+      this.el.menuSkinName.textContent = skin.name;
+    }
+    if (this.el.menuSkinCanvas && skin) {
+      drawSkinPreview(this.el.menuSkinCanvas, skin);
     }
   }
 
