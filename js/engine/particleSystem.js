@@ -216,12 +216,14 @@ class Particles {
       const scale = 1 + (1 - a) * 0.25;
       ctx.save();
       ctx.globalAlpha = a;
-      ctx.font = `800 ${t.size * scale}px "Segoe UI", system-ui, sans-serif`;
+      ctx.font = `800 ${t.size * scale}px 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(6, 12, 8, 0.75)';
       ctx.strokeText(t.text, t.x, t.y);
       ctx.fillStyle = t.color;
+      ctx.shadowColor = t.color;
+      ctx.shadowBlur = 8;
       ctx.fillText(t.text, t.x, t.y);
       ctx.restore();
     }

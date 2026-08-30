@@ -1738,6 +1738,16 @@ const ui = new UIManager({
     );
     ui.showScreen('levels');
   },
+  onContinueGarden() {
+    let target = 0;
+    for (let i = 0; i < LEVELS.length; i++) {
+      if (game.isLevelUnlocked(i)) {
+        target = i;
+        if ((game.save.stars[i] || 0) < 3) break;
+      }
+    }
+    game.startRun('level', target);
+  },
   onOpenBadges() {
     ui.buildBadges(BADGES, id => game.save.badges.includes(id), game.save);
     ui.showScreen('badges');

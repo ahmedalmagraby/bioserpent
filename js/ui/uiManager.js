@@ -17,6 +17,9 @@ class UIManager {
       chipBar: this.$('chipBar'),
       dpad: this.$('dpad'),
       levelGrid: this.$('levelGrid'),
+      levelTotalStars: this.$('levelTotalStars'),
+      levelProgFill: this.$('levelProgFill'),
+      btnContinueGarden: this.$('btnContinueGarden'),
       skinGrid: this.$('skinGrid'),
       badgeGrid: this.$('badgeGrid'),
       menuStats: this.$('menuStats'),
@@ -24,6 +27,7 @@ class UIManager {
       menuSkinName: this.$('menuSkinName'),
       menuSkinPreviewBtn: this.$('menuSkinPreviewBtn'),
       badgeDailyStreak: this.$('badgeDailyStreak'),
+      badgeDailyNew: this.$('badgeDailyNew'),
       dockBadgeCount: this.$('dockBadgeCount'),
       levelBiomeTabs: this.$('levelBiomeTabs'),
       skinHeroCanvas: this.$('skinHeroCanvas'),
@@ -37,6 +41,7 @@ class UIManager {
       overTitle: this.$('overTitle'),
       overMode: this.$('overMode'),
       overStats: this.$('overStats'),
+      overRankBadge: this.$('overRankBadge'),
       starsBox: this.$('starsBox'),
       completeScore: this.$('completeScore'),
       completeNextStar: this.$('completeNextStar'),
@@ -47,11 +52,14 @@ class UIManager {
       pauseSub: this.$('pauseSub'),
       countdown: this.$('countdown'),
       countdownNum: this.$('countdownNum'),
+      dangerVignette: this.$('dangerVignette'),
       subClassic: this.$('subClassic'),
       subLevels: this.$('subLevels'),
       subTimeAttack: this.$('subTimeAttack'),
       subZen: this.$('subZen'),
       subDaily: this.$('subDaily'),
+      valMusic: this.$('valMusic'),
+      valSfx: this.$('valSfx'),
       modalSave: this.$('modal-save'),
       saveJsonArea: this.$('saveJsonArea'),
       saveModalTitle: this.$('saveModalTitle'),
@@ -70,6 +78,7 @@ class UIManager {
     this.chips = new Map();
     this._wire(this.$('btnClassic'), () => this.h.onClassic());
     this._wire(this.$('btnLevels'), () => this.h.onLevels());
+    if (this.el.btnContinueGarden) this._wire(this.el.btnContinueGarden, () => this.h.onContinueGarden ? this.h.onContinueGarden() : this.h.onLevels());
     this._wire(this.$('btnTimeAttack'), () => this.h.onTimeAttack());
     this._wire(this.$('btnZen'), () => this.h.onZen());
     this._wire(this.$('btnDaily'), () => this.h.onDaily());
@@ -211,10 +220,12 @@ class UIManager {
       rival: this.$('setRival')
     };
     s.music.addEventListener('input', () => {
+      if (this.el.valMusic) this.el.valMusic.textContent = s.music.value + '%';
       this.h.onSettingsChange({ music: s.music.value / 100 });
       if (this.h.onPreviewSound) this.h.onPreviewSound('music');
     });
     s.sfx.addEventListener('input', () => {
+      if (this.el.valSfx) this.el.valSfx.textContent = s.sfx.value + '%';
       this.h.onSettingsChange({ sfx: s.sfx.value / 100 });
       if (this.h.onPreviewSound) this.h.onPreviewSound('sfx');
     });
@@ -376,6 +387,12 @@ class UIManager {
     this._lastLevelsArgs = [levels, isUnlocked, starsFor, bestFor];
     this.el.levelGrid.innerHTML = '';
 
+    const totalStarsEarned = levels.reduce((sum, _, i) => sum + starsFor(i), 0);
+    const maxStars = levels.length * 3;
+    const totalPct = Math.round((totalStarsEarned / maxStars) * 100);
+    if (this.el.levelTotalStars) this.el.levelTotalStars.textContent = `${totalStarsEarned} / ${maxStars} ★ (${totalPct}%)`;
+    if (this.el.levelProgFill) this.el.levelProgFill.style.width = `${totalPct}%`;
+
     const BIOME_META = {
       rainforest: { name: '🌿 Emerald Rainforest', color: '#57a05a' },
       oasis: { name: '☀️ Golden Oasis', color: '#d9a95f' },
@@ -515,8 +532,12 @@ class UIManager {
   }
 
   syncSettings(s) {
-    this.$('setMusic').value = Math.round(s.music * 100);
-    this.$('setSfx').value = Math.round(s.sfx * 100);
+    const mVal = Math.round(s.music * 100);
+    const sVal = Math.round(s.sfx * 100);
+    this.$('setMusic').value = mVal;
+    if (this.el.valMusic) this.el.valMusic.textContent = mVal + '%';
+    this.$('setSfx').value = sVal;
+    if (this.el.valSfx) this.el.valSfx.textContent = sVal + '%';
     this.$('setMute').checked = s.muted;
     this.$('setTouch').value = s.touch;
     this.$('setWalls').value = s.walls || 'solid';
@@ -553,6 +574,9 @@ class UIManager {
       if (this.el.badgeDailyStreak) {
         this.el.badgeDailyStreak.textContent = extra.daily.streak >= 1 ? `🔥 ${extra.daily.streak}d` : 'Daily';
       }
+      if (this.el.badgeDailyNew) {
+        this.el.badgeDailyNew.classList.toggle('hidden', !!extra.daily.playedToday);
+      }
     }
     const btnDaily = this.$('btnDaily');
     if (btnDaily && extra && extra.daily) {
@@ -586,18 +610,58 @@ class UIManager {
   gameOver(d) {
     this.el.overTitle.textContent = d.title;
     if (this.el.overMode) this.el.overMode.textContent = d.modeName || '';
-    let rows = `<div>Score</div><b>${d.score}</b>`;
-    rows += `<div>${d.newBest ? '<span class="new-best">★ NEW BEST!</span>' : 'Best ' + d.best}</div>`;
-    rows += `<div class="over-grid">` +
-      `<span>⏱</span><b>${d.time || 0}s</b>` +
-      `<span>🍎</span><b>${d.apples}</b>` +
-      `<span>✨</span><b>${d.golden || 0}</b>` +
-      `<span>🪲</span><b>${d.insects || 0}</b>` +
-      `<span>🍄</span><b>${d.powerups || 0}</b>` +
-      (d.eggs ? `<span>🥚</span><b>${d.eggs}</b>` : '') +
-      `<span>📏</span><b>${d.length}</b>` +
-      `</div>` +
+    
+    // Performance Rank based on score & mode
+    let rank = 'C';
+    const score = d.score || 0;
+    if (d.mode === 'classic') {
+      if (score >= 400) rank = 'S';
+      else if (score >= 250) rank = 'A';
+      else if (score >= 120) rank = 'B';
+    } else if (d.mode === 'timeattack') {
+      if (score >= 300) rank = 'S';
+      else if (score >= 180) rank = 'A';
+      else if (score >= 100) rank = 'B';
+    } else {
+      if (score >= 250) rank = 'S';
+      else if (score >= 150) rank = 'A';
+      else if (score >= 80) rank = 'B';
+    }
+    
+    if (this.el.overRankBadge) {
+      this.el.overRankBadge.textContent = rank;
+      this.el.overRankBadge.className = 'over-rank-badge rank-' + rank.toLowerCase();
+    }
+
+    const bestScore = Math.max(d.best || 0, score);
+    const pbFrac = bestScore > 0 ? Math.min(1, score / bestScore) : 1;
+    const pbPct = Math.round(pbFrac * 100);
+
+    let rows = `
+      <div class="over-score-hero">
+        <span class="hud-label">Final Score</span>
+        <span class="score-num">${d.score}</span>
+        ${d.newBest ? '<span class="new-best">★ NEW PERSONAL BEST!</span>' : ''}
+        <div class="over-pb-comp">
+          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;">
+            <span>Personal Best</span>
+            <span style="color:var(--gold);">${bestScore} (${pbPct}%)</span>
+          </div>
+          <div class="over-pb-track"><div class="over-pb-fill" style="width:${pbPct}%"></div></div>
+        </div>
+      </div>`;
+
+    rows += `
+      <div class="over-grid">
+        <div class="over-grid-item"><span>Time</span><b>${d.time || 0}s</b></div>
+        <div class="over-grid-item"><span>Apples</span><b>${d.apples || 0}</b></div>
+        <div class="over-grid-item"><span>Golden</span><b>${d.golden || 0}</b></div>
+        <div class="over-grid-item"><span>Prey</span><b>${d.insects || 0}</b></div>
+        <div class="over-grid-item"><span>Powerups</span><b>${d.powerups || 0}</b></div>
+        <div class="over-grid-item"><span>Length</span><b>${d.length || 0}</b></div>
+      </div>` +
       (Array.isArray(d.history) && d.history.length > 1 ? this.historyBars(d.history) : '');
+
     this.el.overStats.innerHTML = rows;
     this.showScreen('over');
   }
@@ -637,7 +701,8 @@ class UIManager {
       s.style.animationDelay = i * 0.28 + 's';
       this.el.starsBox.appendChild(s);
     }
-    this.el.completeScore.innerHTML = `Score <b>${d.score}</b>`;
+    this.completeScore = this.el.completeScore;
+    if (this.completeScore) this.completeScore.innerHTML = `Score <b>${d.score}</b>`;
     if (this.el.completeNextStar) {
       if (d.stars < 3 && d.nextStarScore) {
         const nextStarsStr = d.stars === 1 ? '★★' : '★★★';
@@ -683,6 +748,10 @@ class UIManager {
   }
 
   closeGuide() {
+    if (this._guideRaf) {
+      cancelAnimationFrame(this._guideRaf);
+      this._guideRaf = null;
+    }
     this._closeModal(this.$('modal-guide'));
   }
 
@@ -725,53 +794,247 @@ class UIManager {
     });
     const c = this.$('guideContent');
     if (!c) return;
+    this._guideCanvases = [];
     if (tab === 'prey') {
       c.innerHTML = `
         <div class="guide-grid">
-          <div class="guide-card"><div class="g-icon">🍎</div><div><b>Red Apple (+10 pts)</b><p>Primary nourishment. Grows serpent length by 1 and powers combo multipliers.</p></div></div>
-          <div class="guide-card"><div class="g-icon">✨</div><div><b>Golden Berry (+50 pts)</b><p>Rare luminous fruit that pulses with light. Adds +2 length and temporary aura.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🪰</div><div><b>Swift Dragonfly (+60 pts)</b><p>Fast, erratic diagonal flier. Evasive prey that flees when lunged at.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🪲</div><div><b>Ground Beetle (+40 pts)</b><p>Armored crawler patrolling the soil. Adds +1 length and bonus points.</p></div></div>
-          <div class="guide-card"><div class="g-icon">💡</div><div><b>Biolume Firefly (+30 pts)</b><p>Gentle glowing nocturnal flyer drifting serenely through the biomes.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🥚</div><div><b>Serpent Egg (+75 pts)</b><p>A rare treat! Swallow it before it hatches for big points and a magnet burst — dally and it becomes a golden berry.</p></div></div>
+          <div class="guide-card"><canvas id="guideCanvasApple" width="54" height="54"></canvas><div><b>Red Apple (+10 pts)</b><p>Primary nourishment. Grows serpent length by 1 and powers combo multipliers.</p></div></div>
+          <div class="guide-card"><canvas id="guideCanvasGolden" width="54" height="54"></canvas><div><b>Golden Berry (+50 pts)</b><p>Rare luminous fruit that pulses with light. Adds +2 length and temporary aura.</p></div></div>
+          <div class="guide-card"><canvas id="guideCanvasDragonfly" width="54" height="54"></canvas><div><b>Swift Dragonfly (+60 pts)</b><p>Fast, erratic diagonal flier. Evasive prey that flees when lunged at.</p></div></div>
+          <div class="guide-card"><canvas id="guideCanvasBeetle" width="54" height="54"></canvas><div><b>Ground Beetle (+40 pts)</b><p>Armored crawler patrolling the soil. Adds +1 length and bonus points.</p></div></div>
+          <div class="guide-card"><canvas id="guideCanvasFirefly" width="54" height="54"></canvas><div><b>Biolume Firefly (+30 pts)</b><p>Gentle glowing nocturnal flyer drifting serenely through the biomes.</p></div></div>
+          <div class="guide-card"><canvas id="guideCanvasEgg" width="54" height="54"></canvas><div><b>Serpent Egg (+75 pts)</b><p>A rare treat! Swallow it before it hatches for big points and a magnet burst — dally and it becomes a golden berry.</p></div></div>
         </div>`;
+      this._guideCanvases = [
+        { id: 'guideCanvasApple', type: 'apple' },
+        { id: 'guideCanvasGolden', type: 'golden' },
+        { id: 'guideCanvasDragonfly', type: 'dragonfly' },
+        { id: 'guideCanvasBeetle', type: 'beetle' },
+        { id: 'guideCanvasFirefly', type: 'firefly' },
+        { id: 'guideCanvasEgg', type: 'egg' }
+      ];
+      this._startGuideAnim();
     } else if (tab === 'powers') {
+      if (this._guideRaf) cancelAnimationFrame(this._guideRaf);
       c.innerHTML = `
         <div class="guide-grid">
-          <div class="guide-card"><div class="g-icon">🧲</div><div><b>Magnet Spore [M]</b><p>Generates a magnetic field pulling all nearby berries directly to your jaws.</p></div></div>
-          <div class="guide-card"><div class="g-icon">⏱</div><div><b>Slow-Mo Amber [S]</b><p>Dilates time by 50%, granting total precision through obstacle mazes.</p></div></div>
-          <div class="guide-card"><div class="g-icon">👻</div><div><b>Ghost Phase [G]</b><p>Phase through your own body and all hazards — rocks, brambles, and spores — without taking damage.</p></div></div>
-          <div class="guide-card"><div class="g-icon">✖️</div><div><b>2× Multiplier [×2]</b><p>Doubles all score gains from prey and berries during its active duration.</p></div></div>
-          <div class="guide-card"><div class="g-icon">✂️</div><div><b>Prune Shroom [−3]</b><p>Instantly trims 3 tail segments to squeeze safely through tight tunnels.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#ffd54a;">🧲</div><div><b>Magnet Spore [M]</b><p>Generates a magnetic field pulling all nearby berries directly to your jaws.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#6ee7f0;">⏱</div><div><b>Slow-Mo Amber [S]</b><p>Dilates time by 50%, granting total precision through obstacle mazes.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#e07ec5;">👻</div><div><b>Ghost Phase [G]</b><p>Phase through your own body and all hazards — rocks, brambles, and spores — without taking damage.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#ff6b6b;">✖️</div><div><b>2× Multiplier [×2]</b><p>Doubles all score gains from prey and berries during its active duration.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#7ee08a;">✂️</div><div><b>Prune Shroom [−3]</b><p>Instantly trims 3 tail segments to squeeze safely through tight tunnels.</p></div></div>
         </div>`;
     } else if (tab === 'hazards') {
+      if (this._guideRaf) cancelAnimationFrame(this._guideRaf);
       c.innerHTML = `
         <div class="guide-grid">
-          <div class="guide-card"><div class="g-icon">🌀</div><div><b>Paired Portals</b><p>Quantum vortexes connecting distant sectors. Slither into A to emerge at partner A.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🪨</div><div><b>Ancient Rocks</b><p>Impassable mineral monoliths. Striking them will break your momentum.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🌿</div><div><b>Thorn Brambles</b><p>Sharp defensive botanical hazards. Steer carefully around their perimeter.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🟣</div><div><b>Toxic Spores</b><p>Pulsing cavern fungi emitting poisonous spores upon physical contact.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#6ee7f0;">🌀</div><div><b>Paired Portals</b><p>Quantum vortexes connecting distant sectors. Slither into A to emerge at partner A.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#9db8a4;">🪨</div><div><b>Ancient Rocks</b><p>Impassable mineral monoliths. Striking them will break your momentum.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#7ee08a;">🌿</div><div><b>Thorn Brambles</b><p>Sharp defensive botanical hazards. Steer carefully around their perimeter.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#e07ec5;">🟣</div><div><b>Toxic Spores</b><p>Pulsing cavern fungi emitting poisonous spores upon physical contact.</p></div></div>
         </div>`;
     } else {
+      if (this._guideRaf) cancelAnimationFrame(this._guideRaf);
       c.innerHTML = `
         <div class="guide-grid">
-          <div class="guide-card"><div class="g-icon">🔥</div><div><b>Combo System</b><p>Consume food within 3.8s to stack combo streaks from 2× up to 5× points! At high combos your serpent glows — and the music heats up.</p></div></div>
-          <div class="guide-card"><div class="g-icon">⚡</div><div><b>Speed Burst</b><p>Hold <b>Shift</b> on keyboard or <b>⚡</b> on touch to charge forward with a particle tail.</p></div></div>
-          <div class="guide-card"><div class="g-icon">💨</div><div><b>Near Miss Bonus</b><p>Skim past rocks, brambles, or spores without touching them to earn +5 style points. Risk pays!</p></div></div>
-          <div class="guide-card"><div class="g-icon">✨</div><div><b>Milestone Berries</b><p>Every 10 segments of growth conjures a guaranteed golden berry somewhere in the garden.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🔄</div><div><b>Wall Wrap Option</b><p>Toggle walls between Solid and Wrap mode in Settings to loop across edges.</p></div></div>
-          <div class="guide-card"><div class="g-icon">🪷</div><div><b>Zen Flow Mode</b><p>Infinite peaceful garden flow with tail ghosting and zero wall death.</p></div></div>
-          <div class="guide-card"><div class="g-icon">📅</div><div><b>Daily Challenge</b><p>One shared challenge per day with two random modifiers and a rotating biome. Build a streak by playing every day!</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#ffd54a;">🔥</div><div><b>Combo System</b><p>Consume food within 3.8s to stack combo streaks from 2× up to 5× points! At high combos your serpent glows — and the music heats up.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#ffd54a;">⚡</div><div><b>Speed Burst</b><p>Hold <b>Shift</b> on keyboard or <b>⚡</b> on touch to charge forward with a particle tail.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#6ee7f0;">💨</div><div><b>Near Miss Bonus</b><p>Skim past rocks, brambles, or spores without touching them to earn +5 style points. Risk pays!</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#ffd54a;">✨</div><div><b>Milestone Berries</b><p>Every 10 segments of growth conjures a guaranteed golden berry somewhere in the garden.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#7ee08a;">🔄</div><div><b>Wall Wrap Option</b><p>Toggle walls between Solid and Wrap mode in Settings to loop across edges.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#e07ec5;">🪷</div><div><b>Zen Flow Mode</b><p>Infinite peaceful garden flow with tail ghosting and zero wall death.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#ffd54a;">📅</div><div><b>Daily Challenge</b><p>One shared challenge per day with two random modifiers and a rotating biome. Build a streak by playing every day!</p></div></div>
         </div>`;
     }
   }
 
+  _startGuideAnim() {
+    if (this._guideRaf) cancelAnimationFrame(this._guideRaf);
+    const render = (time) => {
+      if (!this.isGuideOpen()) return;
+      const t = time * 0.001;
+      if (this._guideCanvases && this._guideCanvases.length) {
+        for (const item of this._guideCanvases) {
+          const cv = document.getElementById(item.id);
+          if (!cv) continue;
+          const ctx = cv.getContext('2d');
+          const w = cv.width, h = cv.height;
+          ctx.clearRect(0, 0, w, h);
+          const cx = w / 2, cy = h / 2;
+
+          if (item.type === 'apple') {
+            const hop = Math.sin(t * 4) * 2;
+            ctx.save();
+            ctx.translate(cx, cy + hop);
+            const grad = ctx.createRadialGradient(-3, -3, 2, 0, 0, 14);
+            grad.addColorStop(0, '#ff6b6b');
+            grad.addColorStop(0.8, '#d32f2f');
+            grad.addColorStop(1, '#8b0000');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(0, 2, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#7ee08a';
+            ctx.beginPath();
+            ctx.ellipse(4, -9, 5, 2.5, Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#5d4037';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.quadraticCurveTo(2, -11, 0, -13);
+            ctx.stroke();
+            ctx.restore();
+          } else if (item.type === 'golden') {
+            const pulse = 1 + Math.sin(t * 5) * 0.15;
+            ctx.save();
+            ctx.translate(cx, cy);
+            const halo = ctx.createRadialGradient(0, 0, 4, 0, 0, 18 * pulse);
+            halo.addColorStop(0, 'rgba(255, 213, 74, 0.8)');
+            halo.addColorStop(0.5, 'rgba(255, 170, 0, 0.3)');
+            halo.addColorStop(1, 'rgba(255, 213, 74, 0)');
+            ctx.fillStyle = halo;
+            ctx.beginPath();
+            ctx.arc(0, 0, 18 * pulse, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffd54a';
+            ctx.shadowColor = '#ffd54a';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(0, 0, 8 * pulse, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-10 * pulse, 0); ctx.lineTo(10 * pulse, 0);
+            ctx.moveTo(0, -10 * pulse); ctx.lineTo(0, 10 * pulse);
+            ctx.stroke();
+            ctx.restore();
+          } else if (item.type === 'dragonfly') {
+            const flap = Math.sin(t * 26);
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.fillStyle = 'rgba(110, 231, 240, 0.45)';
+            ctx.strokeStyle = 'rgba(110, 231, 240, 0.9)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(-11, -5 * flap, 12, 3, -Math.PI / 8, 0, Math.PI * 2);
+            ctx.ellipse(11, -5 * flap, 12, 3, Math.PI / 8, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(-9, 4 * flap, 10, 2.5, Math.PI / 8, 0, Math.PI * 2);
+            ctx.ellipse(9, 4 * flap, 10, 2.5, -Math.PI / 8, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#00e5ff';
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 2.5, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-2, -10, 1.8, 0, Math.PI * 2);
+            ctx.arc(2, -10, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          } else if (item.type === 'beetle') {
+            const crawl = Math.sin(t * 8) * 1.5;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.strokeStyle = '#c67d0a';
+            ctx.lineWidth = 1.5;
+            for (let i = -1; i <= 1; i++) {
+              const legAnim = Math.sin(t * 12 + i * 2) * 2.5;
+              ctx.beginPath();
+              ctx.moveTo(-5, i * 5);
+              ctx.lineTo(-12, i * 5 + legAnim);
+              ctx.moveTo(5, i * 5);
+              ctx.lineTo(12, i * 5 - legAnim);
+              ctx.stroke();
+            }
+            ctx.fillStyle = '#e69500';
+            ctx.shadowColor = '#ffa000';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.ellipse(0, crawl, 7, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#5a3800';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, crawl - 10);
+            ctx.lineTo(0, crawl + 10);
+            ctx.stroke();
+            ctx.restore();
+          } else if (item.type === 'firefly') {
+            const bob = Math.sin(t * 3) * 2.5;
+            const glow = 0.5 + Math.sin(t * 6) * 0.5;
+            ctx.save();
+            ctx.translate(cx, cy + bob);
+            const aura = ctx.createRadialGradient(0, 5, 2, 0, 5, 14);
+            aura.addColorStop(0, `rgba(126, 224, 138, ${0.9 * glow})`);
+            aura.addColorStop(1, 'rgba(126, 224, 138, 0)');
+            ctx.fillStyle = aura;
+            ctx.beginPath();
+            ctx.arc(0, 5, 14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.ellipse(-5, -3, 6, 2.2, -Math.PI / 4, 0, Math.PI * 2);
+            ctx.ellipse(5, -3, 6, 2.2, Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(0, -3, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#7ee08a';
+            ctx.shadowColor = '#7ee08a';
+            ctx.shadowBlur = 8 * glow;
+            ctx.beginPath();
+            ctx.ellipse(0, 4, 3.5, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          } else if (item.type === 'egg') {
+            const wobble = Math.sin(t * 4) * 0.08;
+            ctx.save();
+            ctx.translate(cx, cy + 2);
+            ctx.rotate(wobble);
+            const eg = ctx.createRadialGradient(-3, -4, 2, 0, 0, 13);
+            eg.addColorStop(0, '#ffffff');
+            eg.addColorStop(0.5, '#d4e8dd');
+            eg.addColorStop(1, '#8fa998');
+            ctx.fillStyle = eg;
+            ctx.shadowColor = '#7ee08a';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 9, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#57a05a';
+            ctx.beginPath();
+            ctx.arc(-2.5, -2, 1, 0, Math.PI * 2);
+            ctx.arc(3.5, 2.5, 0.9, 0, Math.PI * 2);
+            ctx.arc(1, -5, 1.2, 0, Math.PI * 2);
+            ctx.arc(-1.5, 4, 0.9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      }
+      this._guideRaf = requestAnimationFrame(render);
+    };
+    this._guideRaf = requestAnimationFrame(render);
+  }
+
   setUrgent(v) {
     this.$('hudCenter').classList.toggle('urgent', v);
+    if (this.el.dangerVignette) {
+      this.el.dangerVignette.classList.toggle('hidden', !v);
+      this.el.dangerVignette.classList.toggle('active', !!v);
+    }
   }
 }
 
 Object.assign(BS, { UIManager });
 
 })(window.BS);
+
 

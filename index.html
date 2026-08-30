@@ -10,9 +10,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
 <title>BioSerpent — Biomimetic Organic Snake</title>
-<link rel="stylesheet" href="css/main.css?v=25">
-<link rel="stylesheet" href="css/animations.css?v=25">
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/main.css?v=27">
+<link rel="stylesheet" href="css/animations.css?v=27">
 </head>
 <body>
 <div id="app">
@@ -23,7 +25,7 @@
         <span id="hudScore" class="hud-value">0</span>
       </div>
       <div class="hud-best-chip" id="hudBestChip" title="High Score">
-        <span class="hud-best-icon">👑</span>
+        <svg class="svg-icon hud-best-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M2 19h20v2H2zm2-2l3-11 5 5 5-5 3 11H4z"/></svg>
         <span id="hudBest" class="hud-best-val">0</span>
       </div>
     </div>
@@ -36,21 +38,37 @@
 
     <div class="hud-zone hud-right">
       <div id="chipBar" class="hud-buffs"></div>
-      <button id="btnPause" class="icon-btn hud-pause-btn" aria-label="Pause">❚❚</button>
+      <button id="btnPause" class="icon-btn hud-pause-btn" aria-label="Pause">
+        <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="5" y="4" width="4.5" height="16" rx="1.5"/><rect x="14.5" y="4" width="4.5" height="16" rx="1.5"/></svg>
+      </button>
     </div>
   </header>
 
   <main id="stage">
     <canvas id="game" role="img" aria-label="BioSerpent game board"></canvas>
     <div id="countdown" class="hidden"><span id="countdownNum">3</span></div>
+    <div id="dangerVignette" class="danger-vignette hidden"></div>
     <div id="dpad" class="hidden">
-      <button class="dp-btn dp-up" data-dir="up" aria-label="Steer up">▲</button>
-      <button class="dp-btn dp-left" data-dir="left" aria-label="Steer left">◀</button>
-      <button class="dp-btn dp-burst" id="dpBurst" aria-label="Speed burst" aria-pressed="false">⚡</button>
-      <button class="dp-btn dp-right" data-dir="right" aria-label="Steer right">▶</button>
-      <button class="dp-btn dp-down" data-dir="down" aria-label="Steer down">▼</button>
+      <button class="dp-btn dp-up" data-dir="up" aria-label="Steer up">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="12,4 20,18 4,18"/></svg>
+      </button>
+      <button class="dp-btn dp-left" data-dir="left" aria-label="Steer left">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="4,12 18,4 18,20"/></svg>
+      </button>
+      <button class="dp-btn dp-burst" id="dpBurst" aria-label="Speed burst" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </button>
+      <button class="dp-btn dp-right" data-dir="right" aria-label="Steer right">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="20,12 6,4 6,20"/></svg>
+      </button>
+      <button class="dp-btn dp-down" data-dir="down" aria-label="Steer down">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="12,20 4,6 20,6"/></svg>
+      </button>
     </div>
-    <div id="joyBase" class="hidden"><div id="joyStick"></div></div>
+    <div id="joyBase" class="hidden">
+      <div class="joy-compass"></div>
+      <div id="joyStick"></div>
+    </div>
     <div id="ripple" class="hidden"></div>
   </main>
 
@@ -65,7 +83,10 @@
             <span class="menu-equipped-label">Species</span>
             <span id="menuSkinName" class="menu-equipped-name">Emerald</span>
           </div>
-          <span class="menu-equipped-action">🎨 Skin Locker ❯</span>
+          <span class="menu-equipped-action">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.68 1.5-1.5 0-.39-.15-.74-.39-1.02-.23-.27-.38-.62-.38-1.03 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.97-4.48-9-10-9z"/></svg>
+            Locker ❯
+          </span>
         </button>
       </div>
 
@@ -74,13 +95,18 @@
         <button id="btnClassic" class="mode-card hero-mode" aria-label="Play Classic Run">
           <div class="mode-card-left">
             <span class="mode-badge-pill">Standard Survival</span>
-            <span class="mode-title">🐍 Classic Run</span>
+            <span class="mode-title">
+              <svg class="mode-title-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19c2 0 3-1 4-3s2-3 4-3 3 1 4 3 2 3 4 3"/><path d="M8 13c1-2 2-4 4-4s3 2 4 4"/><circle cx="16" cy="7" r="3"/></svg>
+              Classic Run
+            </span>
             <span class="mode-desc">Pure organic survival · Combos & speed bursts</span>
           </div>
           <div class="mode-card-right">
             <span class="mode-stat-label">Best</span>
             <span id="subClassic" class="mode-stat-val">0</span>
-            <span class="mode-play-icon">▶</span>
+            <span class="mode-play-icon">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="7,4 19,12 7,20"/></svg>
+            </span>
           </div>
         </button>
 
@@ -88,7 +114,9 @@
         <div class="mode-grid">
           <button id="btnLevels" class="mode-card biome-card" aria-label="Play Level Garden">
             <div class="mode-card-head">
-              <span class="mode-icon">🌿</span>
+              <span class="mode-icon-svg">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 20h10"/><path d="M10 20c0-4 1-6 2-10 1 4 2 6 2 10"/><path d="M12 10a5 5 0 0 0-5-5c0 4 3 5 5 5z"/><path d="M12 10a5 5 0 0 1 5-5c0 4-3 5-5 5z"/></svg>
+              </span>
               <span class="mode-badge" id="subLevels">0 / 36 ★</span>
             </div>
             <span class="mode-title">Level Garden</span>
@@ -97,8 +125,13 @@
 
           <button id="btnDaily" class="mode-card daily-card" aria-label="Play Daily Challenge">
             <div class="mode-card-head">
-              <span class="mode-icon">📅</span>
-              <span id="badgeDailyStreak" class="mode-badge gold">Daily</span>
+              <span class="mode-icon-svg">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </span>
+              <div class="mode-badges-wrap">
+                <span id="badgeDailyNew" class="mode-badge new-tag hidden">NEW</span>
+                <span id="badgeDailyStreak" class="mode-badge gold">Daily</span>
+              </div>
             </div>
             <span class="mode-title">Daily Challenge</span>
             <span id="subDaily" class="mode-desc">Unique daily modifiers</span>
@@ -106,7 +139,9 @@
 
           <button id="btnTimeAttack" class="mode-card time-card" aria-label="Play Time Attack">
             <div class="mode-card-head">
-              <span class="mode-icon">⏱</span>
+              <span class="mode-icon-svg">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
               <span class="mode-stat-chip">Best: <b id="subTimeAttack">0</b></span>
             </div>
             <span class="mode-title">Time Attack</span>
@@ -115,7 +150,9 @@
 
           <button id="btnZen" class="mode-card zen-card" aria-label="Play Zen Flow">
             <div class="mode-card-head">
-              <span class="mode-icon">🪷</span>
+              <span class="mode-icon-svg">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-2.5 4.5-4 9-4 13 0 3 1.8 5 4 5s4-2 4-5c0-4-1.5-8.5-4-13z"/><path d="M8 12C5 13.5 3 16 3 18.5 3 20.4 4.8 21 7 21c2 0 3.5-.8 5-2"/><path d="M16 12c3 1.5 5 4 5 6.5 0 1.9-1.8 2.5-4 2.5-2 0-3.5-.8-5-2"/></svg>
+              </span>
               <span class="mode-stat-chip">Max: <b id="subZen">0</b></span>
             </div>
             <span class="mode-title">Zen Flow</span>
@@ -126,20 +163,20 @@
         <!-- Quick Access Dock -->
         <div class="menu-dock">
           <button id="btnSkins" class="dock-btn" aria-label="Skins Locker">
-            <span class="dock-icon">🎨</span>
+            <svg class="dock-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.68 1.5-1.5 0-.39-.15-.74-.39-1.02-.23-.27-.38-.62-.38-1.03 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.97-4.48-9-10-9z"/></svg>
             <span class="dock-label">Skins</span>
           </button>
           <button id="btnBadges" class="dock-btn" aria-label="Achievements Badges">
-            <span class="dock-icon">🏅</span>
+            <svg class="dock-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H8v4h8v-4h-1c-.55 0-1-.45-1-1v-2.34"/><path d="M6 4h12a2 2 0 0 1 2 2v3a8 8 0 0 1-8 8 8 8 0 0 1-8-8V6a2 2 0 0 1 2-2z"/></svg>
             <span class="dock-label">Badges</span>
             <span id="dockBadgeCount" class="dock-counter">0/11</span>
           </button>
           <button id="btnGuide" class="dock-btn" aria-label="Field Guide">
-            <span class="dock-icon">📖</span>
+            <svg class="dock-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
             <span class="dock-label">Guide</span>
           </button>
           <button id="btnSettings" class="dock-btn" aria-label="Settings">
-            <span class="dock-icon">⚙️</span>
+            <svg class="dock-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span class="dock-label">Settings</span>
           </button>
         </div>
@@ -154,6 +191,15 @@
       <h2 class="screen-title">Level Garden</h2>
       <p class="screen-sub">Four distinct biomes · twelve handcrafted challenges</p>
     </div>
+    <div class="level-progress-bar glass">
+      <div class="lv-prog-info">
+        <span>Campaign Mastery</span>
+        <span id="levelTotalStars">0 / 36 ★</span>
+      </div>
+      <div class="prog-track wide">
+        <div id="levelProgFill" class="prog-fill" style="width: 0%"></div>
+      </div>
+    </div>
     <div class="filter-tabs" id="levelBiomeTabs">
       <button class="filter-tab active" data-biome="all">All Biomes</button>
       <button class="filter-tab" data-biome="rainforest">🌧 Rainforest</button>
@@ -162,7 +208,10 @@
       <button class="filter-tab" data-biome="reef">🌊 Reef</button>
     </div>
     <div id="levelGrid" class="card-grid"></div>
-    <button class="btn small back-btn" data-back="menu">← Back to Menu</button>
+    <div class="screen-actions">
+      <button id="btnContinueGarden" class="btn primary small">🌿 Continue Campaign</button>
+      <button class="btn small back-btn" data-back="menu">← Back to Menu</button>
+    </div>
   </section>
 
   <section id="screen-skins" class="screen hidden">
@@ -217,30 +266,60 @@
       <div id="pauseStats" class="pause-stats"></div>
       <div id="pauseTip" class="pause-tip"></div>
       <div class="stack">
-        <button id="btnResume" class="btn primary">▶ Resume</button>
-        <button id="btnPauseRestart" class="btn">↻ Restart</button>
-        <button id="btnPauseGuide" class="btn">📖 Field Guide</button>
-        <button id="btnPauseSettings" class="btn">⚙ Settings</button>
-        <button id="btnPauseQuit" class="btn danger">✕ Quit to Menu</button>
+        <button id="btnResume" class="btn primary">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="7,4 19,12 7,20"/></svg>
+          Resume
+        </button>
+        <button id="btnPauseRestart" class="btn">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/></svg>
+          Restart
+        </button>
+        <button id="btnPauseGuide" class="btn">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Field Guide
+        </button>
+        <button id="btnPauseSettings" class="btn">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+        <button id="btnPauseQuit" class="btn danger">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Quit to Menu
+        </button>
       </div>
     </div>
   </section>
 
   <section id="screen-over" class="screen overlay hidden">
-    <div class="panel glass pop-in">
-      <h2 id="overTitle">Game Over</h2>
-      <div id="overMode" class="over-mode"></div>
-      <div id="overStats" class="over-stats"></div>
-      <div class="stack row">
-        <button id="btnOverRestart" class="btn primary">↻ Play Again</button>
-        <button id="btnOverShare" class="btn">📋 Share Result</button>
-        <button id="btnOverMenu" class="btn">☰ Menu</button>
+    <div class="panel glass pop-in over-panel">
+      <div class="over-header-box">
+        <div id="overRankBadge" class="over-rank-badge">A</div>
+        <div class="over-header-text">
+          <h2 id="overTitle">Game Over</h2>
+          <div id="overMode" class="over-mode">Classic Run</div>
+        </div>
       </div>
+      <div id="overStats" class="over-stats"></div>
+      <div class="over-actions stack row">
+        <button id="btnOverRestart" class="btn primary">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/></svg>
+          Play Again
+        </button>
+        <button id="btnOverShare" class="btn">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share Result
+        </button>
+        <button id="btnOverMenu" class="btn">
+          <svg class="btn-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          Menu
+        </button>
+      </div>
+      <div class="arcade-shortcut-hint">Press <b>Space</b> or <b>R</b> to quick restart</div>
     </div>
   </section>
 
   <section id="screen-complete" class="screen overlay hidden">
-    <div class="panel glass pop-in">
+    <div class="panel glass pop-in complete-panel">
       <h2>Level Complete!</h2>
       <div id="starsBox" class="stars-box"></div>
       <div id="completeScore" class="complete-score"></div>
@@ -255,7 +334,10 @@
 
   <div id="modal-guide" class="modal hidden">
     <div class="panel glass pop-in guide-panel">
-      <h2>📖 Serpent Field Guide</h2>
+      <div class="modal-head">
+        <h2>Serpent Field Guide</h2>
+        <p class="modal-sub">Ecological bestiary, power spores, and survival lore</p>
+      </div>
       <div class="guide-tabs">
         <button class="guide-tab active" data-tab="prey">🍎 Prey</button>
         <button class="guide-tab" data-tab="powers">🍄 Power-ups</button>
@@ -263,16 +345,16 @@
         <button class="guide-tab" data-tab="tips">🎮 Controls</button>
       </div>
       <div id="guideContent" class="guide-content">
-        <!-- populated dynamically -->
+        <!-- populated dynamically with interactive animated canvases -->
       </div>
-      <button id="btnCloseGuide" class="btn primary small">Got it</button>
+      <button id="btnCloseGuide" class="btn primary small" style="width: 100%;">Close Guide</button>
     </div>
   </div>
 
   <div id="modal-settings" class="modal hidden">
     <div class="panel glass pop-in settings-panel">
       <div class="modal-head">
-        <h2>⚙️ Settings</h2>
+        <h2>Settings</h2>
         <p class="modal-sub">Audio, controls, visuals and data management</p>
       </div>
       <div class="settings-tabs">
@@ -283,56 +365,77 @@
       </div>
       <div class="settings-content">
         <div class="settings-pane active" id="pane-audio">
-          <label class="setting-row">
-            <span>🎵 Music Volume</span>
-            <input type="range" id="setMusic" min="0" max="100" value="70">
-          </label>
-          <label class="setting-row">
-            <span>🔊 Sound FX</span>
-            <input type="range" id="setSfx" min="0" max="100" value="90">
-          </label>
-          <label class="setting-row check">
-            <input type="checkbox" id="setMute">
-            <span>🔇 Mute all audio</span>
+          <div class="setting-row">
+            <span class="setting-title">Music Volume</span>
+            <div class="slider-group">
+              <input type="range" id="setMusic" min="0" max="100" value="70">
+              <span class="slider-num" id="valMusic">70%</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-title">Sound FX Volume</span>
+            <div class="slider-group">
+              <input type="range" id="setSfx" min="0" max="100" value="90">
+              <span class="slider-num" id="valSfx">90%</span>
+            </div>
+          </div>
+          <label class="setting-row switch-row">
+            <span class="setting-title">Mute All Audio</span>
+            <span class="switch">
+              <input type="checkbox" id="setMute">
+              <span class="slider round"></span>
+            </span>
           </label>
         </div>
+
         <div class="settings-pane hidden" id="pane-controls">
-          <label class="setting-row">
-            <span>📱 Touch Controls</span>
-            <select id="setTouch">
-              <option value="auto">Auto</option>
-              <option value="swipe">Swipe gestures</option>
-              <option value="joystick">Floating joystick</option>
-              <option value="dpad">On-screen D-pad</option>
-              <option value="keys">Keyboard only</option>
+          <div class="setting-row">
+            <span class="setting-title">Touch Controls</span>
+            <select id="setTouch" class="styled-select">
+              <option value="auto">Auto (Detect)</option>
+              <option value="swipe">Swipe Gestures</option>
+              <option value="joystick">Floating Joystick</option>
+              <option value="dpad">On-Screen D-Pad</option>
+              <option value="keys">Keyboard Only</option>
             </select>
-          </label>
-          <label class="setting-row">
-            <span>🧱 Walls Mode</span>
-            <select id="setWalls">
-              <option value="solid">Solid — crash on walls</option>
-              <option value="wrap">Wrap — slide through edges</option>
+          </div>
+          <div class="setting-row">
+            <span class="setting-title">Walls Boundary</span>
+            <select id="setWalls" class="styled-select">
+              <option value="solid">Solid (Classic Lethal)</option>
+              <option value="wrap">Wrap (Portal Edges)</option>
             </select>
-          </label>
+          </div>
           <p class="setting-sub-hint">Walls wrap mode only applies to Classic Run.</p>
-          <label class="setting-row check">
-            <input type="checkbox" id="setRival">
-            <span>🐍 Rival Serpent (Classic Run)</span>
+          <label class="setting-row switch-row">
+            <span class="setting-title">Rival Serpent (Classic Run)</span>
+            <span class="switch">
+              <input type="checkbox" id="setRival">
+              <span class="slider round"></span>
+            </span>
           </label>
-          <p class="hint">Desktop: Arrows / WASD steer · Hold Shift for speed burst · Space pauses · M mute</p>
+          <p class="hint">Desktop: Arrows / WASD steer · Hold Shift for burst · Space pauses · M mute</p>
         </div>
+
         <div class="settings-pane hidden" id="pane-visuals">
-          <label class="setting-row check">
-            <input type="checkbox" id="setShake">
-            <span>📳 Screen Shake</span>
+          <label class="setting-row switch-row">
+            <span class="setting-title">Screen Shake Dynamics</span>
+            <span class="switch">
+              <input type="checkbox" id="setShake">
+              <span class="slider round"></span>
+            </span>
           </label>
-          <label class="setting-row check">
-            <input type="checkbox" id="setFlash">
-            <span>💡 Flash Effects</span>
+          <label class="setting-row switch-row">
+            <span class="setting-title">Flash & Biolume Effects</span>
+            <span class="switch">
+              <input type="checkbox" id="setFlash">
+              <span class="slider round"></span>
+            </span>
           </label>
         </div>
+
         <div class="settings-pane hidden" id="pane-data">
-          <p class="modal-hint">Export your JSON progress or restore from a backup.</p>
+          <p class="modal-hint">Export your JSON save or restore progress from another device.</p>
           <div class="stack row">
             <button id="btnExportSave" class="btn small">⬆ Export Save</button>
             <button id="btnImportSave" class="btn small">⬇ Import Save</button>
@@ -362,19 +465,20 @@
 
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
-<script src="js/engine/canvas.js?v=25"></script>
-<script src="js/engine/gameLoop.js?v=25"></script>
-<script src="js/engine/inputManager.js?v=25"></script>
-<script src="js/engine/particleSystem.js?v=25"></script>
-<script src="js/audio/soundManager.js?v=25"></script>
-<script src="js/entities/snake.js?v=25"></script>
-<script src="js/entities/rival.js?v=25"></script>
-<script src="js/entities/food.js?v=25"></script>
-<script src="js/entities/powerups.js?v=25"></script>
-<script src="js/entities/obstacles.js?v=25"></script>
-<script src="js/levels/levelData.js?v=25"></script>
-<script src="js/ui/uiManager.js?v=25"></script>
-<script src="js/main.js?v=25"></script>
+
+<script src="js/engine/canvas.js?v=27"></script>
+<script src="js/engine/gameLoop.js?v=27"></script>
+<script src="js/engine/inputManager.js?v=27"></script>
+<script src="js/engine/particleSystem.js?v=27"></script>
+<script src="js/audio/soundManager.js?v=27"></script>
+<script src="js/entities/snake.js?v=27"></script>
+<script src="js/entities/rival.js?v=27"></script>
+<script src="js/entities/food.js?v=27"></script>
+<script src="js/entities/powerups.js?v=27"></script>
+<script src="js/entities/obstacles.js?v=27"></script>
+<script src="js/levels/levelData.js?v=27"></script>
+<script src="js/ui/uiManager.js?v=27"></script>
+<script src="js/main.js?v=27"></script>
 
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
