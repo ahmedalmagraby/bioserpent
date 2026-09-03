@@ -177,14 +177,22 @@ class Rival {
       dir = this.tailChaseDir(blocked, seen, prev, start, W, R, wrap);
     }
     if (!dir) dir = this.greedyDir(blocked, W, R, env.target, wrap);
-    if (!dir) return { held: true };   // fully boxed in: freeze rather than die
+    if (!dir) dir = s.dir;
     s.dir = dir;
     return s.step({
       wrap,
       cols: W,
       rows: R,
       ghost: false,
-      blocked: env.hazardAt ? env.hazardAt : null
+      blocked: (x, y) => {
+        if (env.playerCells) {
+          for (let i = 0; i < env.playerCells.length; i++) {
+            const pc = env.playerCells[i];
+            if (pc.x === x && pc.y === y) return 'player';
+          }
+        }
+        return env.hazardAt ? env.hazardAt(x, y) : null;
+      }
     });
   }
 
@@ -278,6 +286,6 @@ class Rival {
   }
 }
 
-Object.assign(BS, { Rival });
+Object.assign(BS, { Rival, RivalSnake: Rival });
 
 })(window.BS);

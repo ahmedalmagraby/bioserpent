@@ -13,8 +13,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/main.css?v=27">
-<link rel="stylesheet" href="css/animations.css?v=27">
+<link rel="stylesheet" href="css/main.css?v=28">
+<link rel="stylesheet" href="css/animations.css?v=28">
 </head>
 <body>
 <div id="app">
@@ -182,7 +182,7 @@
         </div>
       </nav>
 
-      <div id="menuStats" class="menu-stats glass" title="Click to view Badges"></div>
+      <div id="menuStats" class="menu-stats glass" role="button" tabindex="0" title="Click to view Badges" aria-label="View Badges and Achievements"></div>
     </div>
   </section>
 
@@ -259,9 +259,9 @@
     <button class="btn small back-btn" data-back="menu">← Back to Menu</button>
   </section>
 
-  <section id="screen-pause" class="screen overlay hidden">
+  <section id="screen-pause" class="screen overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
     <div class="panel glass pop-in">
-      <h2>Paused</h2>
+      <h2 id="pauseTitle">Paused</h2>
       <div id="pauseSub" class="pause-sub"></div>
       <div id="pauseStats" class="pause-stats"></div>
       <div id="pauseTip" class="pause-tip"></div>
@@ -290,7 +290,7 @@
     </div>
   </section>
 
-  <section id="screen-over" class="screen overlay hidden">
+  <section id="screen-over" class="screen overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overTitle" aria-describedby="overStats">
     <div class="panel glass pop-in over-panel">
       <div class="over-header-box">
         <div id="overRankBadge" class="over-rank-badge">A</div>
@@ -318,9 +318,9 @@
     </div>
   </section>
 
-  <section id="screen-complete" class="screen overlay hidden">
+  <section id="screen-complete" class="screen overlay hidden" role="dialog" aria-modal="true" aria-labelledby="completeTitle">
     <div class="panel glass pop-in complete-panel">
-      <h2>Level Complete!</h2>
+      <h2 id="completeTitle">Level Complete!</h2>
       <div id="starsBox" class="stars-box"></div>
       <div id="completeScore" class="complete-score"></div>
       <div id="completeNextStar" class="complete-next-star"></div>
@@ -332,66 +332,66 @@
     </div>
   </section>
 
-  <div id="modal-guide" class="modal hidden">
+  <div id="modal-guide" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="guideTitle" aria-describedby="guideModalSub">
     <div class="panel glass pop-in guide-panel">
       <div class="modal-head">
-        <h2>Serpent Field Guide</h2>
-        <p class="modal-sub">Ecological bestiary, power spores, and survival lore</p>
+        <h2 id="guideTitle">Serpent Field Guide</h2>
+        <p id="guideModalSub" class="modal-sub">Ecological bestiary, power spores, and survival lore</p>
       </div>
-      <div class="guide-tabs">
-        <button class="guide-tab active" data-tab="prey">🍎 Prey</button>
-        <button class="guide-tab" data-tab="powers">🍄 Power-ups</button>
-        <button class="guide-tab" data-tab="hazards">🚧 Hazards</button>
-        <button class="guide-tab" data-tab="tips">🎮 Controls</button>
+      <div class="guide-tabs" role="tablist" aria-label="Field Guide Sections">
+        <button class="guide-tab active" data-tab="prey" role="tab" aria-selected="true" aria-controls="guideContent" id="guideTab-prey">🍎 Prey</button>
+        <button class="guide-tab" data-tab="powers" role="tab" aria-selected="false" aria-controls="guideContent" id="guideTab-powers">🍄 Power-ups</button>
+        <button class="guide-tab" data-tab="hazards" role="tab" aria-selected="false" aria-controls="guideContent" id="guideTab-hazards">🚧 Hazards</button>
+        <button class="guide-tab" data-tab="tips" role="tab" aria-selected="false" aria-controls="guideContent" id="guideTab-tips">🎮 Controls</button>
       </div>
-      <div id="guideContent" class="guide-content">
+      <div id="guideContent" class="guide-content" role="tabpanel" aria-labelledby="guideTab-prey" tabindex="0">
         <!-- populated dynamically with interactive animated canvases -->
       </div>
-      <button id="btnCloseGuide" class="btn primary small" style="width: 100%;">Close Guide</button>
+      <button id="btnCloseGuide" class="btn primary small" style="width: 100%;" aria-label="Close Field Guide">Close Guide</button>
     </div>
   </div>
 
-  <div id="modal-settings" class="modal hidden">
+  <div id="modal-settings" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-describedby="settingsModalSub">
     <div class="panel glass pop-in settings-panel">
       <div class="modal-head">
-        <h2>Settings</h2>
-        <p class="modal-sub">Audio, controls, visuals and data management</p>
+        <h2 id="settingsTitle">Settings</h2>
+        <p id="settingsModalSub" class="modal-sub">Audio, controls, visuals and data management</p>
       </div>
-      <div class="settings-tabs">
-        <button class="settings-tab active" data-tab="audio">🎵 Audio</button>
-        <button class="settings-tab" data-tab="controls">🎮 Controls</button>
-        <button class="settings-tab" data-tab="visuals">✨ Visuals</button>
-        <button class="settings-tab" data-tab="data">💾 Data</button>
+      <div class="settings-tabs" role="tablist" aria-label="Settings Categories">
+        <button class="settings-tab active" data-tab="audio" role="tab" aria-selected="true" aria-controls="pane-audio" id="settingsTab-audio">🎵 Audio</button>
+        <button class="settings-tab" data-tab="controls" role="tab" aria-selected="false" aria-controls="pane-controls" id="settingsTab-controls">🎮 Controls</button>
+        <button class="settings-tab" data-tab="visuals" role="tab" aria-selected="false" aria-controls="pane-visuals" id="settingsTab-visuals">✨ Visuals</button>
+        <button class="settings-tab" data-tab="data" role="tab" aria-selected="false" aria-controls="pane-data" id="settingsTab-data">💾 Data</button>
       </div>
       <div class="settings-content">
-        <div class="settings-pane active" id="pane-audio">
+        <div class="settings-pane active" id="pane-audio" role="tabpanel" aria-labelledby="settingsTab-audio" tabindex="0">
           <div class="setting-row">
-            <span class="setting-title">Music Volume</span>
+            <span class="setting-title" id="lblSetMusic">Music Volume</span>
             <div class="slider-group">
-              <input type="range" id="setMusic" min="0" max="100" value="70">
-              <span class="slider-num" id="valMusic">70%</span>
+              <input type="range" id="setMusic" min="0" max="100" value="70" aria-labelledby="lblSetMusic" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%">
+              <span class="slider-num" id="valMusic" aria-hidden="true">70%</span>
             </div>
           </div>
           <div class="setting-row">
-            <span class="setting-title">Sound FX Volume</span>
+            <span class="setting-title" id="lblSetSfx">Sound FX Volume</span>
             <div class="slider-group">
-              <input type="range" id="setSfx" min="0" max="100" value="90">
-              <span class="slider-num" id="valSfx">90%</span>
+              <input type="range" id="setSfx" min="0" max="100" value="90" aria-labelledby="lblSetSfx" aria-valuemin="0" aria-valuemax="100" aria-valuenow="90" aria-valuetext="90%">
+              <span class="slider-num" id="valSfx" aria-hidden="true">90%</span>
             </div>
           </div>
           <label class="setting-row switch-row">
             <span class="setting-title">Mute All Audio</span>
             <span class="switch">
-              <input type="checkbox" id="setMute">
+              <input type="checkbox" id="setMute" aria-label="Mute All Audio">
               <span class="slider round"></span>
             </span>
           </label>
         </div>
 
-        <div class="settings-pane hidden" id="pane-controls">
+        <div class="settings-pane hidden" id="pane-controls" role="tabpanel" aria-labelledby="settingsTab-controls" tabindex="0">
           <div class="setting-row">
-            <span class="setting-title">Touch Controls</span>
-            <select id="setTouch" class="styled-select">
+            <span class="setting-title" id="lblSetTouch">Touch Controls</span>
+            <select id="setTouch" class="styled-select" aria-labelledby="lblSetTouch">
               <option value="auto">Auto (Detect)</option>
               <option value="swipe">Swipe Gestures</option>
               <option value="joystick">Floating Joystick</option>
@@ -400,8 +400,8 @@
             </select>
           </div>
           <div class="setting-row">
-            <span class="setting-title">Walls Boundary</span>
-            <select id="setWalls" class="styled-select">
+            <span class="setting-title" id="lblSetWalls">Walls Boundary</span>
+            <select id="setWalls" class="styled-select" aria-labelledby="lblSetWalls">
               <option value="solid">Solid (Classic Lethal)</option>
               <option value="wrap">Wrap (Portal Edges)</option>
             </select>
@@ -410,55 +410,55 @@
           <label class="setting-row switch-row">
             <span class="setting-title">Rival Serpent (Classic Run)</span>
             <span class="switch">
-              <input type="checkbox" id="setRival">
+              <input type="checkbox" id="setRival" aria-label="Rival Serpent in Classic Run">
               <span class="slider round"></span>
             </span>
           </label>
           <p class="hint">Desktop: Arrows / WASD steer · Hold Shift for burst · Space pauses · M mute</p>
         </div>
 
-        <div class="settings-pane hidden" id="pane-visuals">
+        <div class="settings-pane hidden" id="pane-visuals" role="tabpanel" aria-labelledby="settingsTab-visuals" tabindex="0">
           <label class="setting-row switch-row">
             <span class="setting-title">Screen Shake Dynamics</span>
             <span class="switch">
-              <input type="checkbox" id="setShake">
+              <input type="checkbox" id="setShake" aria-label="Screen Shake Dynamics">
               <span class="slider round"></span>
             </span>
           </label>
           <label class="setting-row switch-row">
             <span class="setting-title">Flash & Biolume Effects</span>
             <span class="switch">
-              <input type="checkbox" id="setFlash">
+              <input type="checkbox" id="setFlash" aria-label="Flash & Biolume Effects">
               <span class="slider round"></span>
             </span>
           </label>
         </div>
 
-        <div class="settings-pane hidden" id="pane-data">
+        <div class="settings-pane hidden" id="pane-data" role="tabpanel" aria-labelledby="settingsTab-data" tabindex="0">
           <p class="modal-hint">Export your JSON save or restore progress from another device.</p>
           <div class="stack row">
-            <button id="btnExportSave" class="btn small">⬆ Export Save</button>
-            <button id="btnImportSave" class="btn small">⬇ Import Save</button>
+            <button id="btnExportSave" class="btn small" aria-label="Export save data to clipboard or file">⬆ Export Save</button>
+            <button id="btnImportSave" class="btn small" aria-label="Import save data">⬇ Import Save</button>
           </div>
           <div class="stack row" style="margin-top: 8px;">
-            <button id="btnResetProgress" class="btn danger small">Reset All Progress</button>
+            <button id="btnResetProgress" class="btn danger small" aria-label="Reset all game progress">Reset All Progress</button>
           </div>
         </div>
       </div>
-      <button id="btnCloseSettings" class="btn primary small" style="margin-top: 6px; width: 100%;">Done</button>
+      <button id="btnCloseSettings" class="btn primary small" style="margin-top: 6px; width: 100%;" aria-label="Save and close settings">Done</button>
     </div>
   </div>
 
-  <div id="modal-save" class="modal hidden">
+  <div id="modal-save" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="saveModalTitle" aria-describedby="saveModalSub">
     <div class="panel glass pop-in save-panel">
       <h2 id="saveModalTitle">Save Data</h2>
       <p id="saveModalSub" class="screen-sub">Backup, export, or restore your progress JSON</p>
-      <textarea id="saveJsonArea" class="save-textarea" rows="7" spellcheck="false" placeholder="Paste your save JSON here..."></textarea>
+      <textarea id="saveJsonArea" class="save-textarea" rows="7" spellcheck="false" placeholder="Paste your save JSON here..." aria-label="Save data JSON text" aria-describedby="saveModalSub"></textarea>
       <div class="stack row">
-        <button id="btnSaveCopy" class="btn small">📋 Copy</button>
-        <button id="btnSaveDownload" class="btn small">💾 Download File</button>
-        <button id="btnSaveApplyImport" class="btn primary small">📥 Import & Restore</button>
-        <button id="btnCloseSaveModal" class="btn small">Close</button>
+        <button id="btnSaveCopy" class="btn small" aria-label="Copy save data to clipboard">📋 Copy</button>
+        <button id="btnSaveDownload" class="btn small" aria-label="Download save data as file">💾 Download File</button>
+        <button id="btnSaveApplyImport" class="btn primary small" aria-label="Import and restore save data">📥 Import & Restore</button>
+        <button id="btnCloseSaveModal" class="btn small" aria-label="Close save dialog">Close</button>
       </div>
     </div>
   </div>
@@ -466,19 +466,19 @@
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
 
-<script src="js/engine/canvas.js?v=27"></script>
-<script src="js/engine/gameLoop.js?v=27"></script>
-<script src="js/engine/inputManager.js?v=27"></script>
-<script src="js/engine/particleSystem.js?v=27"></script>
-<script src="js/audio/soundManager.js?v=27"></script>
-<script src="js/entities/snake.js?v=27"></script>
-<script src="js/entities/rival.js?v=27"></script>
-<script src="js/entities/food.js?v=27"></script>
-<script src="js/entities/powerups.js?v=27"></script>
-<script src="js/entities/obstacles.js?v=27"></script>
-<script src="js/levels/levelData.js?v=27"></script>
-<script src="js/ui/uiManager.js?v=27"></script>
-<script src="js/main.js?v=27"></script>
+<script src="js/engine/canvas.js?v=28"></script>
+<script src="js/engine/gameLoop.js?v=28"></script>
+<script src="js/engine/inputManager.js?v=28"></script>
+<script src="js/engine/particleSystem.js?v=28"></script>
+<script src="js/audio/soundManager.js?v=28"></script>
+<script src="js/entities/snake.js?v=28"></script>
+<script src="js/entities/rival.js?v=28"></script>
+<script src="js/entities/food.js?v=28"></script>
+<script src="js/entities/powerups.js?v=28"></script>
+<script src="js/entities/obstacles.js?v=28"></script>
+<script src="js/levels/levelData.js?v=28"></script>
+<script src="js/ui/uiManager.js?v=28"></script>
+<script src="js/main.js?v=28"></script>
 
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

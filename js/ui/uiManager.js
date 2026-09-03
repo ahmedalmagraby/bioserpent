@@ -3,7 +3,7 @@ window.BS = window.BS || {};
 "use strict";
 const { SKINS, drawSkinPreview } = BS;
 
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 class UIManager {
   constructor(handlers) {
@@ -66,6 +66,10 @@ class UIManager {
       saveModalSub: this.$('saveModalSub')
     };
     this._statsHtml = '';
+    this._focusStack = [];
+    this._prevFocus = null;
+    this._lastTrigger = null;
+    this._trapHandler = this._trapHandler.bind(this);
     this.screens = {
       menu: this.$('screen-menu'),
       levels: this.$('screen-levels'),
@@ -173,11 +177,28 @@ class UIManager {
     // Global Keyboard navigation
     window.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        if (this.isSaveModalOpen()) { this.closeSaveModal(); return; }
-        if (this.isGuideOpen()) { this.closeGuide(); return; }
-        if (this.isSettingsOpen()) { this.closeSettingsModal(); return; }
+        if (this.isSaveModalOpen()) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          this.closeSaveModal();
+          return;
+        }
+        if (this.isGuideOpen()) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          this.closeGuide();
+          return;
+        }
+        if (this.isSettingsOpen()) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          this.closeSettingsModal();
+          return;
+        }
         const activeScreen = Object.keys(this.screens).find(k => k !== 'menu' && !this.screens[k].classList.contains('hidden'));
         if (activeScreen === 'levels' || activeScreen === 'skins' || activeScreen === 'badges') {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
           this.h.onClick();
           this.h.onBack('menu');
         }
@@ -209,6 +230,13 @@ class UIManager {
       this.h.onClick();
       this.h.onOpenBadges();
     });
+    this.el.menuStats.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
+        if (e.preventDefault) e.preventDefault();
+        this.h.onClick();
+        this.h.onOpenBadges();
+      }
+    });
     const s = {
       music: this.$('setMusic'),
       sfx: this.$('setSfx'),
@@ -220,11 +248,15 @@ class UIManager {
       rival: this.$('setRival')
     };
     s.music.addEventListener('input', () => {
+      s.music.setAttribute('aria-valuenow', s.music.value);
+      s.music.setAttribute('aria-valuetext', s.music.value + '%');
       if (this.el.valMusic) this.el.valMusic.textContent = s.music.value + '%';
       this.h.onSettingsChange({ music: s.music.value / 100 });
       if (this.h.onPreviewSound) this.h.onPreviewSound('music');
     });
     s.sfx.addEventListener('input', () => {
+      s.sfx.setAttribute('aria-valuenow', s.sfx.value);
+      s.sfx.setAttribute('aria-valuetext', s.sfx.value + '%');
       if (this.el.valSfx) this.el.valSfx.textContent = s.sfx.value + '%';
       this.h.onSettingsChange({ sfx: s.sfx.value / 100 });
       if (this.h.onPreviewSound) this.h.onPreviewSound('sfx');
@@ -239,8 +271,15 @@ class UIManager {
 
 
   _wire(el, fn) {
+    if (!el) return;
     el.addEventListener('click', () => {
-      el.blur();
+      this._lastTrigger = el;
+      const isModalTrigger = el.id === 'btnSettings' || el.id === 'btnPauseSettings' ||
+                             el.id === 'btnGuide' || el.id === 'btnPauseGuide' ||
+                             el.id === 'btnExportSave' || el.id === 'btnImportSave';
+      if (!isModalTrigger) {
+        el.blur();
+      }
       this.h.onClick();
       fn();
     });
@@ -254,15 +293,31 @@ class UIManager {
     b.classList.remove('armed');
   }
 
-  _openModal(m) {
+  _getFocusable(container) {
+    if (!container) return [];
+    const isVisible = el => {
+      if (el.disabled || el.getAttribute('aria-hidden') === 'true') return false;
+      if (el.closest && el.closest('.hidden')) return false;
+      return el.offsetParent !== null || (el.getClientRects && el.getClientRects().length > 0) || !el.classList.contains('hidden');
+    };
+    return Array.from(container.querySelectorAll(FOCUSABLE)).filter(isVisible);
+  }
+
+  _openModal(m, trigger = null) {
     if (!m) return;
-    this._prevFocus = document.activeElement;
+    const prev = trigger || (document.activeElement && document.activeElement !== document.body ? document.activeElement : this._lastTrigger);
+    this._focusStack.push({ modal: m, prevFocus: prev });
+    this._prevFocus = prev;
     m.classList.remove('hidden');
     m.addEventListener('keydown', this._trapHandler);
     const p = m.querySelector('.panel');
     if (p) {
       p.setAttribute('tabindex', '-1');
-      p.focus({ preventScroll: true });
+    }
+    const f = this._getFocusable(m);
+    const initial = f.find(el => el.classList && el.classList.contains('active')) || f[0] || p;
+    if (initial && typeof initial.focus === 'function') {
+      try { initial.focus({ preventScroll: true }); } catch (_) { initial.focus(); }
     }
   }
 
@@ -270,25 +325,35 @@ class UIManager {
     if (!m) return;
     m.classList.add('hidden');
     m.removeEventListener('keydown', this._trapHandler);
-    if (this._prevFocus && this._prevFocus.focus) {
-      try { this._prevFocus.focus({ preventScroll: true }); } catch (_) { this._prevFocus.focus(); }
+    let entry = null;
+    for (let i = this._focusStack.length - 1; i >= 0; i--) {
+      if (this._focusStack[i].modal === m) {
+        entry = this._focusStack.splice(i, 1)[0];
+        break;
+      }
     }
-    this._prevFocus = null;
+    const target = entry ? entry.prevFocus : (m._prevFocus || this._prevFocus);
+    if (target && typeof target.focus === 'function') {
+      try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
+    }
+    this._prevFocus = this._focusStack.length > 0 ? this._focusStack[this._focusStack.length - 1].prevFocus : null;
   }
 
   _trapHandler(e) {
+    if (e.key === 'Escape') return;
     if (e.key !== 'Tab') return;
     const modal = e.currentTarget;
-    const f = modal.querySelectorAll(FOCUSABLE);
+    const f = this._getFocusable ? this._getFocusable(modal) : Array.from(modal.querySelectorAll(FOCUSABLE)).filter(el => !el.disabled && (!el.closest || !el.closest('.hidden')));
     if (!f.length) return;
     const first = f[0];
     const last = f[f.length - 1];
-    if (e.shiftKey && (document.activeElement === first || document.activeElement === modal.querySelector('.panel'))) {
+    const p = modal.querySelector('.panel');
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === p)) {
       last.focus();
-      e.preventDefault();
+      if (e.preventDefault) e.preventDefault();
     } else if (!e.shiftKey && document.activeElement === last) {
       first.focus();
-      e.preventDefault();
+      if (e.preventDefault) e.preventDefault();
     }
   }
 
@@ -349,6 +414,9 @@ class UIManager {
   }
 
   setChips(list) {
+    if (this.el.chipBar) {
+      this.el.chipBar.classList.toggle('compact', list.length > 2);
+    }
     const seen = new Set();
     for (const c of list) {
       seen.add(c.key);
@@ -370,6 +438,10 @@ class UIManager {
         this.chips.delete(key);
       }
     }
+  }
+
+  updateBuffs(list) {
+    return this.setChips(list);
   }
 
   toast(html, category = '') {
@@ -534,9 +606,19 @@ class UIManager {
   syncSettings(s) {
     const mVal = Math.round(s.music * 100);
     const sVal = Math.round(s.sfx * 100);
-    this.$('setMusic').value = mVal;
+    const setMusic = this.$('setMusic');
+    if (setMusic) {
+      setMusic.value = mVal;
+      setMusic.setAttribute('aria-valuenow', mVal);
+      setMusic.setAttribute('aria-valuetext', mVal + '%');
+    }
     if (this.el.valMusic) this.el.valMusic.textContent = mVal + '%';
-    this.$('setSfx').value = sVal;
+    const setSfx = this.$('setSfx');
+    if (setSfx) {
+      setSfx.value = sVal;
+      setSfx.setAttribute('aria-valuenow', sVal);
+      setSfx.setAttribute('aria-valuetext', sVal + '%');
+    }
     if (this.el.valSfx) this.el.valSfx.textContent = sVal + '%';
     this.$('setMute').checked = s.muted;
     this.$('setTouch').value = s.touch;
@@ -551,7 +633,9 @@ class UIManager {
 
   setSettingsTab(tab) {
     document.querySelectorAll('.settings-tab').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tab);
+      const active = b.dataset.tab === tab;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
     });
     document.querySelectorAll('.settings-pane').forEach(p => {
       p.classList.toggle('hidden', p.id !== `pane-${tab}`);
@@ -743,8 +827,8 @@ class UIManager {
   }
 
   openGuide() {
-    this.setGuideTab('prey');
     this._openModal(this.$('modal-guide'));
+    this.setGuideTab('prey');
   }
 
   closeGuide() {
@@ -790,10 +874,13 @@ class UIManager {
 
   setGuideTab(tab) {
     document.querySelectorAll('.guide-tab').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tab);
+      const active = b.dataset.tab === tab;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
     });
     const c = this.$('guideContent');
     if (!c) return;
+    c.setAttribute('aria-labelledby', `guideTab-${tab}`);
     this._guideCanvases = [];
     if (tab === 'prey') {
       c.innerHTML = `
@@ -850,6 +937,11 @@ class UIManager {
 
   _startGuideAnim() {
     if (this._guideRaf) cancelAnimationFrame(this._guideRaf);
+    const dpr = Math.min(window.devicePixelRatio || 1, (window.BS && window.BS.CONFIG && window.BS.CONFIG.dprMax) || 3);
+    const cssW = 54, cssH = 54;
+    const targetW = Math.round(cssW * dpr);
+    const targetH = Math.round(cssH * dpr);
+
     const render = (time) => {
       if (!this.isGuideOpen()) return;
       const t = time * 0.001;
@@ -857,10 +949,16 @@ class UIManager {
         for (const item of this._guideCanvases) {
           const cv = document.getElementById(item.id);
           if (!cv) continue;
+          if (cv.width !== targetW || cv.height !== targetH) {
+            cv.width = targetW;
+            cv.height = targetH;
+            cv.style.width = cssW + 'px';
+            cv.style.height = cssH + 'px';
+          }
           const ctx = cv.getContext('2d');
-          const w = cv.width, h = cv.height;
-          ctx.clearRect(0, 0, w, h);
-          const cx = w / 2, cy = h / 2;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, cssW, cssH);
+          const cx = cssW / 2, cy = cssH / 2;
 
           if (item.type === 'apple') {
             const hop = Math.sin(t * 4) * 2;
@@ -1021,7 +1119,7 @@ class UIManager {
       }
       this._guideRaf = requestAnimationFrame(render);
     };
-    this._guideRaf = requestAnimationFrame(render);
+    render(0);
   }
 
   setUrgent(v) {

@@ -65,15 +65,27 @@ class SoundManager {  constructor() {
   }
 
   setVolumes(v) {
-    Object.assign(this.volumes, v);
+    if (v) {
+      if (typeof v.music === 'number' && Number.isFinite(v.music)) this.volumes.music = Math.max(0, Math.min(1, v.music));
+      if (typeof v.sfx === 'number' && Number.isFinite(v.sfx)) this.volumes.sfx = Math.max(0, Math.min(1, v.sfx));
+      if (typeof v.muted === 'boolean') this.volumes.muted = v.muted;
+    }
     this.applyVolumes();
   }
 
   applyVolumes() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(t);
+    this.master.gain.setValueAtTime(this.master.gain.value, t);
     this.master.gain.setTargetAtTime(this.volumes.muted ? 0 : 1, t, 0.05);
+
+    this.musicBus.gain.cancelScheduledValues(t);
+    this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, t);
     this.musicBus.gain.setTargetAtTime(this.volumes.music * 0.5, t, 0.08);
+
+    this.sfxBus.gain.cancelScheduledValues(t);
+    this.sfxBus.gain.setValueAtTime(this.sfxBus.gain.value, t);
     this.sfxBus.gain.setTargetAtTime(this.volumes.sfx, t, 0.05);
   }
 

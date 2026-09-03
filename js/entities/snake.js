@@ -172,7 +172,7 @@ class Snake {
   grow(n) { this.growPending += n; }
 
   shrink(n) {
-    const rem = Math.min(n, this.cells.length - 3);
+    const rem = Math.max(0, Math.min(n, this.cells.length - 3));
     const removed = this.cells.splice(this.cells.length - rem, rem);
     for (const c of removed) this._occRemove(c.x, c.y);
     if (this.path.length > this.cells.length + 2) this.path.length = this.cells.length + 2;
@@ -212,21 +212,19 @@ class Snake {
       return { death: 'wall' };
     }
     const willGrow = this.growPending > 0;
-    if (!teleported) {
-      // Self-collision: skipped by Ghost Phase power-up (ghost) or by Zen / daily ghosty (ghostSelf).
-      if (!env.ghost && !env.ghostSelf) {
-        const lim = this.cells.length - (willGrow ? 0 : 1);
-        for (let i = 0; i < lim; i++) {
-          const c = this.cells[i];
-          if (c.x === nx && c.y === ny) return { death: 'self' };
-        }
+    // Self-collision: skipped by Ghost Phase power-up (ghost) or by Zen / daily ghosty (ghostSelf).
+    if (!env.ghost && !env.ghostSelf) {
+      const lim = this.cells.length - (willGrow ? 0 : 1);
+      for (let i = 0; i < lim; i++) {
+        const c = this.cells[i];
+        if (c.x === nx && c.y === ny) return { death: 'self' };
       }
-      // Obstacle collision: skipped only by the Ghost Phase power-up (ghost).
-      // Zen mode and the daily ghosty modifier do NOT grant obstacle immunity.
-      if (!env.ghost) {
-        const ob = env.blocked ? env.blocked(nx, ny) : null;
-        if (ob) return { death: ob };
-      }
+    }
+    // Obstacle collision: skipped only by the Ghost Phase power-up (ghost).
+    // Zen mode and the daily ghosty modifier do NOT grant obstacle immunity.
+    if (!env.ghost) {
+      const ob = env.blocked ? env.blocked(nx, ny) : null;
+      if (ob) return { death: ob };
     }
 
     this.cells.unshift({ x: nx, y: ny });

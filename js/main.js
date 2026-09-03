@@ -40,14 +40,18 @@ function loadSave() {
     return defaultSave();
   }
   const d = defaultSave();
+  const skin = s.skin && SKINS.some(sk => sk.id === s.skin) ? s.skin : 'emerald';
+  const music = typeof s.settings?.music === 'number' && Number.isFinite(s.settings.music) ? clamp(s.settings.music, 0, 1) : d.settings.music;
+  const sfx = typeof s.settings?.sfx === 'number' && Number.isFinite(s.settings.sfx) ? clamp(s.settings.sfx, 0, 1) : d.settings.sfx;
+  const settings = Object.assign(d.settings, s.settings || {}, { music, sfx });
   return {
     best: Object.assign(d.best, s.best),
     daily: Object.assign(d.daily, s.daily || {}),
     history: s.history || {},
     levelBest: s.levelBest || {},
     stars: s.stars || {},
-    settings: Object.assign(d.settings, s.settings),
-    skin: s.skin || 'emerald',
+    settings,
+    skin,
     seenHint: !!s.seenHint,
     stats: Object.assign(d.stats, s.stats),
     badges: s.badges || []
@@ -85,9 +89,6 @@ function hashStr(str) {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
-}
-function dailyKeyToday() {
-  return 'daily-' + dayKey();
 }
 function dailySpec(key = dayKey()) {
   const rng = mulberry32(hashStr(key));
@@ -610,13 +611,22 @@ class Game {
         this.food.spawnApple((x, y) => this.isFreeCell(x, y));
       }
     }
+    if (this.powerups && (this.state === 'playing' || this.state === 'countdown')) {
+      const R = liveRows();
+      for (let i = this.powerups.field.length - 1; i >= 0; i--) {
+        const p = this.powerups.field[i];
+        if (p.gy >= R || p.gx >= COLS || p.gy < 0 || p.gx < 0) {
+          this.powerups.field.splice(i, 1);
+        }
+      }
+    }
   }
 
   currentBest() {
     if (this.mode === 'classic') return this.save.best.classic;
     if (this.mode === 'timeattack') return this.save.best.timeattack;
     if (this.mode === 'zen') return this.save.best.zen;
-    if (this.mode === 'daily') return this.save.daily.key === dailyKeyToday() ? this.save.daily.best : 0;
+    if (this.mode === 'daily') return this.save.daily.key === dayKey() ? this.save.daily.best : 0;
     return this.save.levelBest[this.levelIdx] || 0;
   }
 
@@ -626,9 +636,15 @@ class Game {
     if (wasDailyActive) {
       this.recordDailyScore();
     }
-    // Note: Zen-mode save-on-restart is handled exclusively by the onRestart handler
-    // (and gotoMenu) before calling startRun(), so we do NOT duplicate it here.
-    // startRun() is also called on first launch and mode switches where no prior run exists.
+    const wasZenActive = this.mode === 'zen' && this.run &&
+      (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown');
+    if (wasZenActive) {
+      this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
+      if (this.snake.length > this.save.best.zen) {
+        this.save.best.zen = this.snake.length;
+      }
+      this.persist();
+    }
     this.sound.unlock();
     this.ui.closeSettingsModal();
     this.ui.closeSaveModal();
@@ -818,6 +834,13 @@ class Game {
   togglePause() {
     if (this.state === 'playing' || this.state === 'countdown') {
       this.state = 'paused';
+      if (this.mode === 'zen' && this.run) {
+        this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
+        if (this.snake.length > this.save.best.zen) {
+          this.save.best.zen = this.snake.length;
+        }
+        this.persist();
+      }
       this.ui.hideCountdown();
       this.burst = false;
       if (this._lastBurstI) {
@@ -1179,7 +1202,6 @@ class Game {
       const prev = s.levelBest[this.levelIdx] || 0;
       if (this.run.score > prev) { s.levelBest[this.levelIdx] = this.run.score; newBest = true; }
     }
-    this.persist();
     if (this.mode === 'daily') this.recordDailyScore();
     // Track recent scores per mode for the history sparkbars
     if (!this.save.history) this.save.history = {};
@@ -1187,8 +1209,11 @@ class Game {
     const h = this.save.history[hkey] || (this.save.history[hkey] = []);
     h.push(this.run.score);
     if (h.length > 10) h.shift();
+    this.checkBadges();
+    this.persist();
     const rows = {
       title,
+      mode: this.mode,
       modeName: this.getModeName(),
       score: this.run.score,
       best: this.currentBest(),
@@ -1222,8 +1247,15 @@ class Game {
     const stars = sc >= lv.stars[2] ? 3 : sc >= lv.stars[1] ? 2 : 1;
     buzz([25, 35, 25]);
     this.save.stars[this.levelIdx] = Math.max(this.save.stars[this.levelIdx] || 0, stars);
+    this.save.levelBest[this.levelIdx] = Math.max(this.save.levelBest[this.levelIdx] || 0, sc);
+    this.save.stats.games++;
     if (this.run.pacifist) this.save.stats.pacifist = true;
     this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
+    if (!this.save.history) this.save.history = {};
+    const hkey = 'level' + this.levelIdx;
+    const h = this.save.history[hkey] || (this.save.history[hkey] = []);
+    h.push(sc);
+    if (h.length > 10) h.shift();
     this.checkBadges();
     this.persist();
     for (let i = 0; i < stars; i++) {
@@ -1336,6 +1368,13 @@ class Game {
       this.food.spawnApple((x, y) => this.isFreeCell(x, y));
     }
     this.run.lengthMax = Math.max(this.run.lengthMax, this.snake.length);
+    if (this.mode === 'zen') {
+      this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
+      if (this.snake.length > this.save.best.zen) {
+        this.save.best.zen = this.snake.length;
+        this.persist();
+      }
+    }
     if (this.mode === 'classic') {
       this.stepMs = clamp(CONFIG.stepMs.classic - this.run.foodEaten * CONFIG.speedPerApple, CONFIG.minStepMs, CONFIG.stepMs.classic);
       if (this.stepMs <= CONFIG.topSpeedMs && !this.save.stats.topspeed) {
@@ -1431,25 +1470,51 @@ class Game {
         target: this.food.items.find(i => i.type === 'apple') || null
       });
       if (rivalStep && rivalStep.death) this.killRival();
-      // Rival eats apples too — denies the player and grows itself
+      // Rival eats apples, golden berries, and eggs — denies the player and grows itself
       if (this.rival && rivalStep) {
         const rh = this.rival.snake.head;
         const stolen = this.food.collideCell(rh.x, rh.y);
-        if (stolen && stolen.type === 'apple') {
-          this.rival.snake.grow(1);   // same growth rate as the player
-          this.rival.snake.eatPulse();
-          if (this.rival.snake.length >= 13) {
-            // Size cap: keep the rival a peer, not a board-filling leviathan
-            this.rival.snake.growPending = 0;
-          }
-          this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
-            count: 10, colors: ['#b388ff', '#e53935', '#ff8a80'], speed: 0.1, size: 2, life: 450
-          });
-          this.particles.popup(this.view.cx(rh.x), this.view.cy(rh.y) - this.view.cell, 'Rival ate it!', '#b388ff', 13);
-          this.sound.bite(this._pan);
-          buzz(8);
-          if (!this.food.items.some(i => i.type === 'apple')) {
-            this.food.spawnApple((x, y) => this.isFreeCell(x, y));
+        if (stolen) {
+          if (stolen.type === 'apple') {
+            this.rival.snake.grow(1);   // same growth rate as the player
+            this.rival.snake.eatPulse();
+            if (this.rival.snake.length >= 13) {
+              // Size cap: keep the rival a peer, not a board-filling leviathan
+              this.rival.snake.growPending = 0;
+            }
+            this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
+              count: 10, colors: ['#b388ff', '#e53935', '#ff8a80'], speed: 0.1, size: 2, life: 450
+            });
+            this.particles.popup(this.view.cx(rh.x), this.view.cy(rh.y) - this.view.cell, 'Rival ate it!', '#b388ff', 13);
+            this.sound.bite(this._pan);
+            buzz(8);
+            if (!this.food.items.some(i => i.type === 'apple')) {
+              this.food.spawnApple((x, y) => this.isFreeCell(x, y));
+            }
+          } else if (stolen.type === 'golden') {
+            this.rival.snake.grow(2);
+            this.rival.snake.eatPulse();
+            if (this.rival.snake.length >= 13) {
+              this.rival.snake.growPending = 0;
+            }
+            this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
+              count: 14, colors: ['#ffd54a', '#b388ff', '#ffffff'], speed: 0.12, size: 2.2, life: 550, type: 'spark'
+            });
+            this.particles.popup(this.view.cx(rh.x), this.view.cy(rh.y) - this.view.cell, 'Rival stole berry! ⚡', '#ffd54a', 14);
+            this.sound.bite(this._pan);
+            buzz(12);
+          } else if (stolen.type === 'egg') {
+            this.rival.snake.grow(2);
+            this.rival.snake.eatPulse();
+            if (this.rival.snake.length >= 13) {
+              this.rival.snake.growPending = 0;
+            }
+            this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
+              count: 14, colors: ['#f8f4e6', '#b388ff', '#d9cba8'], speed: 0.12, size: 2.2, life: 550
+            });
+            this.particles.popup(this.view.cx(rh.x), this.view.cy(rh.y) - this.view.cell, 'Rival poached egg! 🥚', '#f8f4e6', 14);
+            this.sound.bite(this._pan);
+            buzz(12);
           }
         }
       }
@@ -1848,17 +1913,21 @@ const ui = new UIManager({
       const obj = JSON.parse(txt);
       if (!obj || typeof obj !== 'object' || !obj.best || !obj.settings) throw new Error('shape');
       const d = defaultSave();
+      const skin = obj.skin && SKINS.some(sk => sk.id === obj.skin) ? obj.skin : 'emerald';
+      const music = typeof obj.settings?.music === 'number' && Number.isFinite(obj.settings.music) ? clamp(obj.settings.music, 0, 1) : d.settings.music;
+      const sfx = typeof obj.settings?.sfx === 'number' && Number.isFinite(obj.settings.sfx) ? clamp(obj.settings.sfx, 0, 1) : d.settings.sfx;
+      const settings = Object.assign(d.settings, obj.settings || {}, { music, sfx });
       game.save = {
         best: Object.assign(d.best, obj.best),
         daily: Object.assign(d.daily, obj.daily || {}),
         history: obj.history || {},
         levelBest: obj.levelBest || {},
         stars: obj.stars || {},
-        settings: Object.assign(d.settings, obj.settings),
-        skin: obj.skin || 'emerald',
+        settings,
+        skin,
         seenHint: !!obj.seenHint,
         stats: Object.assign(d.stats, obj.stats),
-        badges: obj.badges || []
+        badges: Array.isArray(obj.badges) ? obj.badges : []
       };
       game.persist();
       game.applySettings();
@@ -1974,6 +2043,13 @@ window.addEventListener('resize', () => {
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
+      game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
+      if (game.snake.length > game.save.best.zen) {
+        game.save.best.zen = game.snake.length;
+      }
+      game.persist();
+    }
     if (game.state === 'playing' || game.state === 'countdown') game.togglePause();
     sound.setSuspended(true);
   } else {
@@ -1982,7 +2058,24 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('blur', () => {
+  if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
+    game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
+    if (game.snake.length > game.save.best.zen) {
+      game.save.best.zen = game.snake.length;
+    }
+    game.persist();
+  }
   if (game.state === 'playing' || game.state === 'countdown') game.togglePause();
+});
+
+window.addEventListener('beforeunload', () => {
+  if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
+    game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
+    if (game.snake.length > game.save.best.zen) {
+      game.save.best.zen = game.snake.length;
+    }
+    game.persist();
+  }
 });
 
 const unlockOnce = () => {

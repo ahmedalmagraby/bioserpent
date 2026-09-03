@@ -1,5 +1,5 @@
 // BioSerpent service worker — offline-first cache for PWA install.
-const CACHE = 'bioserpent-v27';
+const CACHE = 'bioserpent-v28';
 const ASSETS = [
   './',
   './index.html',
@@ -41,7 +41,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(hit => {
+    caches.match(e.request, { ignoreSearch: true }).then(hit => {
       const fetching = fetch(e.request).then(res => {
         if (res && res.ok && new URL(e.request.url).origin === location.origin) {
           const copy = res.clone();

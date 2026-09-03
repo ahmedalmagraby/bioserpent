@@ -32,6 +32,7 @@ class InputManager {
     this._joyId = null;
     this._burstId = null;
     this._joyCenter = null;
+    this._joyLastDir = null;
     this.joyBase = document.getElementById('joyBase');
     this.joyStick = document.getElementById('joyStick');
     this.rippleEl = document.getElementById('ripple');
@@ -258,12 +259,18 @@ class InputManager {
         this.showRipple(p.x, p.y);
       } else if (this.mode === 'joystick') {
         this._joyId = e.pointerId;
+        this._joyLastDir = null;
+        const r = this.stage ? this.stage.getBoundingClientRect() : null;
         // Offset center slightly above touch point so thumb doesn't block stick
         const joyOffsetY = 40;
-        this._joyCenter = { x: p.x, y: Math.max(55, p.y - joyOffsetY) };
+        const maxW = r && r.width > 110 ? r.width - 55 : 55;
+        const maxH = r && r.height > 110 ? r.height - 55 : 55;
+        const cx = Math.max(55, Math.min(maxW, p.x));
+        const cy = Math.max(55, Math.min(maxH, p.y - joyOffsetY));
+        this._joyCenter = { x: cx, y: cy };
         this.joyBase.classList.remove('hidden');
-        this.joyBase.style.left = this._joyCenter.x + 'px';
-        this.joyBase.style.top = this._joyCenter.y + 'px';
+        this.joyBase.style.left = cx + 'px';
+        this.joyBase.style.top = cy + 'px';
         this.joyStick.style.transform = 'translate(-50%,-50%)';
       }
     } else if (this._burstId === null && e.pointerId !== this._joyId) {
@@ -299,7 +306,12 @@ class InputManager {
       this.joyStick.style.transform = `translate(calc(-50% + ${nx * cl}px), calc(-50% + ${ny * cl}px))`;
       if (mag > 16) {
         const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
-        this.h.onDir(dir);
+        if (dir !== this._joyLastDir) {
+          this._joyLastDir = dir;
+          this.h.onDir(dir);
+        }
+      } else {
+        this._joyLastDir = null;
       }
     }
   }
@@ -308,6 +320,7 @@ class InputManager {
     if (this._swipe && e.pointerId === this._swipe.id) this._swipe = null;
     if (e.pointerId === this._joyId) {
       this._joyId = null;
+      this._joyLastDir = null;
       this.hideJoy();
     }
     if (e.pointerId === this._burstId) {
@@ -318,6 +331,7 @@ class InputManager {
   }
 
   hideJoy() {
+    this._joyLastDir = null;
     this.joyBase.classList.add('hidden');
   }
 
@@ -339,27 +353,29 @@ class InputManager {
   }
 
   bindDPad(container) {
-    this._dpActiveId = null;
+    this._dpDirId = null;
+    this._dpBurstId = null;
     this._dpLastDir = null;
-    this._dpBurstGesture = false;
     container.addEventListener('pointerdown', e => {
-      const btn = e.target.closest('.dp-btn');
+      const btn = e.target && e.target.closest
+        ? e.target.closest('.dp-btn')
+        : (e.target && (e.target.id === 'dpBurst' || (e.target.classList && e.target.classList.contains('dp-btn'))) ? e.target : null);
       if (!btn) return;
-      e.preventDefault();
-      this._dpActiveId = e.pointerId;
-      this._dpBurstGesture = !btn.dataset.dir;
-      try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
-      if (this._dpBurstGesture) {
+      if (e.preventDefault) e.preventDefault();
+      try { if (btn.releasePointerCapture) btn.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (btn.id === 'dpBurst' || !btn.dataset.dir) {
+        this._dpBurstId = e.pointerId;
         this.h.onBurst(true);
         this.setBurstVisual(true);
       } else {
+        this._dpDirId = e.pointerId;
         this._dpLastDir = btn.dataset.dir;
         this.h.onDir(btn.dataset.dir);
       }
     });
     container.addEventListener('pointermove', e => {
-      if (e.pointerId !== this._dpActiveId || this._dpBurstGesture || this._dpLastDir === null) return;
-      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (e.pointerId !== this._dpDirId || this._dpLastDir === null) return;
+      const el = document.elementFromPoint ? document.elementFromPoint(e.clientX, e.clientY) : null;
       const btn = el && el.closest ? el.closest('.dp-btn[data-dir]') : null;
       const dir = btn ? btn.dataset.dir : null;
       if (dir && dir !== this._dpLastDir) {
@@ -368,13 +384,14 @@ class InputManager {
       }
     });
     const release = e => {
-      if (e.pointerId !== this._dpActiveId) return;
-      this._dpActiveId = null;
-      this._dpLastDir = null;
-      if (this._dpBurstGesture) {
-        this._dpBurstGesture = false;
+      if (e.pointerId === this._dpBurstId) {
+        this._dpBurstId = null;
         this.h.onBurst(false);
         this.setBurstVisual(false);
+      }
+      if (e.pointerId === this._dpDirId) {
+        this._dpDirId = null;
+        this._dpLastDir = null;
       }
     };
     container.addEventListener('pointerup', release);

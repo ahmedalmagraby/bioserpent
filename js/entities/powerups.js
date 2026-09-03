@@ -72,8 +72,13 @@ class PowerUpManager {
   }
 
   update(dt) {
+    const R = liveRows();
     for (let i = this.field.length - 1; i >= 0; i--) {
       const p = this.field[i];
+      if (p.gy >= R || p.gx >= COLS || p.gy < 0 || p.gx < 0) {
+        this.field.splice(i, 1);
+        continue;
+      }
       p.age += dt;
       p.life -= dt;
       if (p.life <= 0) this.field.splice(i, 1);

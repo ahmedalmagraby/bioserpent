@@ -318,6 +318,24 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
   transition: width 0.1s linear;
 }
 
+/* Compact buff chip mode when >2 chips active or manually toggled */
+#chipBar.compact .chip,
+.hud-buffs.compact .chip,
+.hud-chip-bar.compact .chip {
+  padding: 2px 5px 2px 3px;
+  gap: 3px;
+}
+#chipBar.compact .chip span:not(.dot):not(.bar),
+.hud-buffs.compact .chip span:not(.dot):not(.bar),
+.hud-chip-bar.compact .chip span:not(.dot):not(.bar) {
+  display: none;
+}
+#chipBar.compact .chip .bar,
+.hud-buffs.compact .chip .bar,
+.hud-chip-bar.compact .chip .bar {
+  width: 16px;
+}
+
 .icon-btn, .hud-pause-btn {
   width: 38px;
   height: 38px;
@@ -332,6 +350,13 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
   transition: transform 0.15s ease, background 0.2s ease;
   display: grid;
   place-items: center;
+  position: relative;
+}
+.hud-pause-btn::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  cursor: pointer;
 }
 .icon-btn:hover, .hud-pause-btn:hover { background: rgba(255, 255, 255, 0.14); transform: scale(1.06); }
 .icon-btn:active, .hud-pause-btn:active { transform: scale(0.94); }
@@ -803,6 +828,7 @@ body.dpad-open #stage {
   cursor: pointer;
   border: 1px solid var(--stroke);
   transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
 }
 .menu-stats:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -812,6 +838,13 @@ body.dpad-open #stage {
 }
 .menu-stats:active {
   transform: translateY(0);
+}
+.menu-stats:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 16px rgba(126, 224, 138, 0.35);
 }
 .menu-stats b { color: var(--ink); }
 .menu-stats span { opacity: 0.35; }
@@ -1694,6 +1727,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .guide-card canvas {
+  width: 54px;
+  height: 54px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.35);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
@@ -1858,7 +1893,7 @@ input[type="range"]::-moz-range-thumb {
 .back-btn { margin-top: 6px; }
 
 @media (max-width: 520px) {
-  #dpad { --dp: 58px; --dp-gap: 9px; }
+  :root { --dp: 58px; --dp-gap: 9px; }
   #hud { padding: 6px 10px 2px; gap: 6px; }
   .hud-score-card { min-width: 62px; padding: 3px 8px; border-radius: 11px; }
   .hud-label { font-size: 8.5px; }
@@ -1872,9 +1907,9 @@ input[type="range"]::-moz-range-thumb {
   .hud-pause-btn { width: 34px; height: 34px; font-size: 11px; }
   .hud-bar { width: min(130px, 30vw); height: 3px; }
   .hud-combo { font-size: 11px; height: 14px; }
-  .chip { padding: 2px 6px 2px 3px; font-size: 10px; gap: 4px; }
+  .chip { padding: 2px 5px 2px 3px; font-size: 10px; gap: 3px; }
   .chip .dot { width: 14px; height: 14px; font-size: 8px; }
-  .chip .bar { width: 22px; height: 3px; }
+  .chip .bar { width: 18px; height: 3px; }
   .title { font-size: clamp(34px, 10vw, 52px); }
   .tagline { letter-spacing: 0.2em; }
   .panel { padding: 20px 16px; gap: 12px; }
@@ -1891,6 +1926,63 @@ input[type="range"]::-moz-range-thumb {
   .dock-btn { padding: 6px 2px; }
   .dock-label { font-size: 10px; }
   .filter-tab { padding: 5px 10px; font-size: 11px; }
+}
+
+@media (max-width: 420px) {
+  /* Compact buff chips on narrow screens: hide text label, show glyph + micro bar */
+  .chip span:not(.dot):not(.bar) {
+    display: none;
+  }
+  .chip {
+    padding: 2px 5px 2px 3px;
+    gap: 3px;
+  }
+  .chip .bar {
+    width: 16px;
+  }
+  /* Compact stats: hide verbose small label, preserve icon and numeric value */
+  .stat small {
+    display: none;
+  }
+  .stat {
+    padding: 2px 5px;
+    gap: 2px;
+  }
+  .stat b {
+    font-size: 11.5px;
+  }
+  .hud-stats {
+    gap: 3px;
+  }
+  .hud-bar {
+    width: min(100px, 25vw);
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --dp: 50px;
+    --dp-gap: 7px;
+  }
+  #hud {
+    padding: 4px 6px 2px;
+    gap: 4px;
+  }
+  .hud-score-card {
+    min-width: 0;
+    padding: 2px 6px;
+  }
+  .hud-value {
+    font-size: 16px;
+  }
+  /* Hide best chip on ultra-narrow screens during gameplay to preserve center space */
+  #hudBestChip {
+    display: none;
+  }
+  .chip .bar {
+    width: 12px;
+    height: 2.5px;
+  }
 }
 
 /* Landscape mode: side-by-side hero + modes layout to prevent vertical squishing */
