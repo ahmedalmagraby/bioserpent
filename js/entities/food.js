@@ -19,43 +19,81 @@ class FoodManager {
   constructor() {
     this.items = [];
     this.insects = [];
-    this.occ = new Set();
+    this.occ = new Map();
+    this._lastItemsRef = this.items;
+    this._lastInsectsRef = this.insects;
+    this._itemCount = 0;
+    this._insectCount = 0;
     this._ver = 0;
     this._cachedNearest = null;
+    this._pullTick = 1;
   }
 
   reset() {
     this.items.length = 0;
     this.insects.length = 0;
     this.occ.clear();
+    this._lastItemsRef = this.items;
+    this._lastInsectsRef = this.insects;
+    this._itemCount = 0;
+    this._insectCount = 0;
     this._ver++;
     this._cachedNearest = null;
+    this._pullTick = 1;
   }
 
   static occKey(x, y) { return y * 4096 + x; }
 
-  _syncOcc() {
+  _occAdd(x, y) {
+    const k = FoodManager.occKey(x, y);
+    this.occ.set(k, (this.occ.get(k) || 0) + 1);
+  }
+
+  _occRemove(x, y) {
+    const k = FoodManager.occKey(x, y);
+    const n = (this.occ.get(k) || 0) - 1;
+    if (n <= 0) this.occ.delete(k); else this.occ.set(k, n);
+  }
+
+  _rebuildOcc() {
     this.occ.clear();
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];
-      this.occ.add(it.gy * 4096 + it.gx);
+      this._occAdd(it.gx, it.gy);
     }
     for (let i = 0; i < this.insects.length; i++) {
       const n = this.insects[i];
-      this.occ.add(Math.round(n.fy) * 4096 + Math.round(n.fx));
-      this.occ.add(n.ty * 4096 + n.tx);
+      this._occAdd(n.tx, n.ty);
+      if (n.prog < 1 && (n.fx !== n.tx || n.fy !== n.ty)) {
+        this._occAdd(n.fx, n.fy);
+      }
     }
+    this._lastItemsRef = this.items;
+    this._lastInsectsRef = this.insects;
+    this._itemCount = this.items.length;
+    this._insectCount = this.insects.length;
+  }
+
+  _checkOccSync() {
+    if (this._lastItemsRef !== this.items ||
+        this._lastInsectsRef !== this.insects ||
+        this._itemCount !== this.items.length ||
+        this._insectCount !== this.insects.length) {
+      this._rebuildOcc();
+    }
+  }
+
+  _syncOcc() {
+    this._rebuildOcc();
   }
 
   occupied(x, y) {
-    if (!this.occ.size && (this.items.length > 0 || this.insects.length > 0)) {
-      this._syncOcc();
-    }
-    return this.occ.has(y * 4096 + x);
+    this._checkOccSync();
+    return this.occ.has(FoodManager.occKey(x, y));
   }
 
   randomFree(isFree) {
-    this._syncOcc();
+    this._checkOccSync();
     const m = CONFIG.spawnMargin || 0;
     const x0 = Math.min(m, COLS - 1);
     const x1 = Math.max(x0, COLS - 1 - m);
@@ -100,7 +138,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (c) {
       this.items.push({ type: 'apple', gx: c.x, gy: c.y, age: rand(0, 3000), hop: 0, pop: 0 });
-      this.occ.add(c.y * 4096 + c.x);
+      this._occAdd(c.x, c.y);
+      this._itemCount = this.items.length;
       this._ver++;
       return true;
     }
@@ -112,7 +151,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (!c) return false;
     this.items.push({ type: 'golden', gx: c.x, gy: c.y, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
-    this.occ.add(c.y * 4096 + c.x);
+    this._occAdd(c.x, c.y);
+    this._itemCount = this.items.length;
     this._ver++;
     return true;
   }
@@ -131,7 +171,8 @@ class FoodManager {
       wing: rand(0, TAU),
       pop: 0
     });
-    this.occ.add(c.y * 4096 + c.x);
+    this._occAdd(c.x, c.y);
+    this._insectCount = this.insects.length;
     this._ver++;
     return true;
   }
@@ -143,7 +184,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (!c) return false;
     this.items.push({ type: 'egg', gx: c.x, gy: c.y, age: 0, life: CONFIG.eggLifeMs, maxLife: CONFIG.eggLifeMs, hop: 0, pop: 0, wob: rand(0, TAU) });
-    this.occ.add(c.y * 4096 + c.x);
+    this._occAdd(c.x, c.y);
+    this._itemCount = this.items.length;
     this._ver++;
     if (particles && view) {
       particles.burst(view.cx(c.x), view.cy(c.y), {
@@ -155,7 +197,10 @@ class FoodManager {
 
 
   magnetPull(head, canLand) {
-    this._syncOcc();
+    this._checkOccSync();
+    this._pullTick = (this._pullTick + 1) % 2;
+    if (this._pullTick !== 0) return;
+
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];
       const dx = head.x - it.gx;
@@ -167,22 +212,24 @@ class FoodManager {
       if (Math.abs(dx) >= Math.abs(dy)) nx += Math.sign(dx);
       else ny += Math.sign(dy);
       if (canLand(nx, ny) && !this.occupied(nx, ny)) {
-        this.occ.delete(it.gy * 4096 + it.gx);
+        this._occRemove(it.gx, it.gy);
         it.gx = nx;
         it.gy = ny;
         it.hop = 1;
-        this.occ.add(ny * 4096 + nx);
+        this._occAdd(nx, ny);
         this._ver++;
       }
     }
   }
 
   update(dt, env) {
+    this._checkOccSync();
     const R = liveRows();
     let itemsChanged = false;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
+        this._occRemove(it.gx, it.gy);
         this.items.splice(i, 1);
         itemsChanged = true;
         continue;
@@ -198,6 +245,7 @@ class FoodManager {
               count: 10, colors: ['#ffd54a', '#fff3b0'], speed: 0.08, size: 2, life: 500
             });
           }
+          this._occRemove(it.gx, it.gy);
           this.items.splice(i, 1);
           itemsChanged = true;
         }
@@ -220,10 +268,8 @@ class FoodManager {
       }
     }
     if (itemsChanged) {
+      this._itemCount = this.items.length;
       this._ver++;
-      this._syncOcc();
-    } else {
-      this._syncOcc();
     }
     for (const n of this.insects) {
       n.age += dt;
@@ -231,6 +277,13 @@ class FoodManager {
       if (n.pop !== undefined && n.pop < 1) n.pop = Math.min(1, n.pop + dt / 220);
       if (n.prog < 1) {
         n.prog = Math.min(1, n.prog + dt / n.dur);
+        if (n.prog >= 1) {
+          if (n.fx !== n.tx || n.fy !== n.ty) {
+            this._occRemove(n.fx, n.fy);
+            n.fx = n.tx;
+            n.fy = n.ty;
+          }
+        }
         continue;
       }
       n.fx = n.tx;
@@ -266,10 +319,9 @@ class FoodManager {
       }
       if (chosen) {
         n.dir = chosen;
-        this.occ.delete(n.ty * 4096 + n.tx);
         n.tx = n.fx + chosen.x;
         n.ty = n.fy + chosen.y;
-        this.occ.add(n.ty * 4096 + n.tx);
+        this._occAdd(n.tx, n.ty);
         this._ver++;
         n.prog = 0;
         const baseDur = n.kind === 'dragonfly' ? 240 : n.kind === 'beetle' ? 320 : 460;
@@ -280,10 +332,12 @@ class FoodManager {
   }
 
   collideCell(gx, gy) {
+    this._checkOccSync();
     const idx = this.items.findIndex(i => i.gx === gx && i.gy === gy);
     if (idx >= 0) {
       const it = this.items.splice(idx, 1)[0];
-      this.occ.delete(gy * 4096 + gx);
+      this._occRemove(it.gx, it.gy);
+      this._itemCount = this.items.length;
       this._ver++;
       return it;
     }
@@ -299,6 +353,7 @@ class FoodManager {
   }
 
   insectHit(x, y, cell) {
+    this._checkOccSync();
     const gx = cell !== undefined ? (x / cell) - 0.5 : x;
     const gy = cell !== undefined ? (y / cell) - 0.5 : y;
     for (let i = 0; i < this.insects.length; i++) {
@@ -309,8 +364,12 @@ class FoodManager {
       const dy = p.y - gy;
       if (dx * dx + dy * dy < threshold * threshold) {
         const ins = this.insects.splice(i, 1)[0];
+        this._occRemove(ins.tx, ins.ty);
+        if (ins.prog < 1 && (ins.fx !== ins.tx || ins.fy !== ins.ty)) {
+          this._occRemove(ins.fx, ins.fy);
+        }
+        this._insectCount = this.insects.length;
         this._ver++;
-        this._syncOcc();
         return ins;
       }
     }
