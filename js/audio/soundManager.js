@@ -12,6 +12,7 @@ class SoundManager {  constructor() {
     this.volumes = { music: 0.7, sfx: 0.9, muted: false };
     this._song = null;
     this._intensity = 0;
+    this._lastChimeTime = 0;
   }
 
   setIntensity(v) {
@@ -180,11 +181,16 @@ class SoundManager {  constructor() {
   }
 
   bite(pan) {
+    if (!this.ctx || this.volumes.muted) return false;
+    // Collapse bite+comboChime overlap: drop bite if a chime played <120ms ago
+    if (performance.now() - this._lastChimeTime < 120) return false;
     this.noise({ bp: 900, q: 1, dur: 0.09, gain: 0.45, pan });
     this.tone({ type: 'sine', f: 170, f2: 55, dur: 0.13, gain: 0.4, pan });
+    return true;
   }
 
   golden(pan) {
+    if (!this.ctx || this.volumes.muted) return;
     [880, 1174.7, 1568].forEach((f, i) => {
       this.tone({ type: 'triangle', f, dur: 0.32, gain: 0.2, t: this.time + i * 0.07, echo: true, pan });
     });
@@ -205,10 +211,18 @@ class SoundManager {  constructor() {
   }
 
   comboChime(comboLevel, pan) {
+    if (!this.ctx || this.volumes.muted) return false;
+    const now = performance.now();
+    // Voice limiter: skip comboChime below combo 3 when another chime played <120ms ago
+    if (comboLevel < 3 && (now - this._lastChimeTime < 120)) {
+      return false;
+    }
+    this._lastChimeTime = now;
     const scale = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
     const idx = Math.min(Math.max(0, comboLevel - 1), scale.length - 1);
     const f = scale[idx];
     this.tone({ type: 'sine', f, f2: f * 1.05, dur: 0.22, gain: 0.18, echo: true, pan });
+    return true;
   }
 
   nearMiss(pan) {
@@ -224,6 +238,7 @@ class SoundManager {  constructor() {
   }
 
   powerup(pan) {
+    if (!this.ctx || this.volumes.muted) return;
     this.tone({ type: 'sawtooth', f: 220, f2: 660, dur: 0.35, gain: 0.13, lp: 400, lp2: 2600, pan });
     [523, 659, 784].forEach((f, i) => {
       this.tone({ type: 'sine', f, dur: 0.55, gain: 0.1, attack: 0.12, t: this.time + 0.1 + i * 0.04, echo: true, pan });

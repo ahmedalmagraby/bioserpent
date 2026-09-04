@@ -922,21 +922,27 @@ class Game {
     }
     const hx = this.view.cx(this.snake.head.x);
     const hy = this.view.cy(this.snake.head.y);
-    this._eatsThisTick = (this._eatsThisTick || 0) + 1;
-    const isRapid = this._eatsThisTick > 1;
+    let burstOpts;
     if (kind === 'apple') {
-      this.particles.burst(hx, hy, { count: isRapid ? 8 : 14, colors: ['#e53935', '#ff8a80', '#ffcdd2'], speed: 0.14, size: 2.4, life: 550, grav: 0.0004 });
-      this.sound.bite(this._pan);
+      burstOpts = { count: 14, colors: ['#e53935', '#ff8a80', '#ffcdd2'], speed: 0.14, size: 2.4, life: 550, grav: 0.0004 };
+      let playedChime = false;
+      if (this.combo > 1) {
+        playedChime = this.sound.comboChime(this.combo, this._pan);
+      }
+      if (!playedChime) {
+        this.sound.bite(this._pan);
+      }
       buzz(12);
     } else {
-      this.particles.burst(hx, hy, { count: isRapid ? 12 : 22, colors: ['#ffd54a', '#fff59d', '#ffffff'], speed: 0.17, size: 2.6, life: 750, type: 'spark' });
+      burstOpts = { count: 22, colors: ['#ffd54a', '#fff59d', '#ffffff'], speed: 0.17, size: 2.6, life: 750, type: 'spark' };
       if (this.save.settings.flash !== false) this.particles.flash('#ffd54a', 0.08);
       this.sound.golden(this._pan);
+      if (this.combo > 1) this.sound.comboChime(this.combo, this._pan);
       buzz([16, 24, 16]);
     }
-    if (this.combo > 1) this.sound.comboChime(this.combo, this._pan);
     const popColor = this.combo >= 4 ? '#ff69b4' : this.combo > 1 || mult > 1 ? '#ffd54a' : '#eaf5ec';
-    this.particles.popup(hx, hy - this.view.cell * 0.6, '+' + gain + (this.combo > 1 ? ` (×${this.combo})` : ''), popColor, this.combo > 2 ? 18 : 15);
+    const popSize = this.combo > 2 ? 18 : 15;
+    this._queueEat(hx, hy, burstOpts, gain, hx, hy - this.view.cell * 0.6, popColor, popSize);
     if (this.mode === 'timeattack') {
       this.taTime += kind === 'apple' ? CONFIG.taAppleBonus : CONFIG.taGoldenBonus;
     }
@@ -965,25 +971,26 @@ class Game {
     this.snake.eatPulse();
     const hx = this.view.cx(this.snake.head.x);
     const hy = this.view.cy(this.snake.head.y);
+    let burstOpts;
     if (kind === 'dragonfly') {
-      this.particles.burst(hx, hy, {
+      burstOpts = {
         count: 18,
         colors: ['#00f5d4', '#00b4d8', '#90e0ef', '#ffffff'],
         speed: 0.16, size: 2.5, life: 750, type: 'spark'
-      });
+      };
       this.sound.dragonfly(this._pan);
     } else {
-      this.particles.burst(hx, hy, {
+      burstOpts = {
         count: 12,
         colors: kind === 'firefly' ? ['#d4ff78', '#f0ffc4'] : ['#8d6e63', '#d7ccc8'],
         speed: 0.13, size: 2, life: 600, type: 'glow'
-      });
+      };
       this.sound.insect(this._pan);
     }
     if (this.combo > 1) this.sound.comboChime(this.combo, this._pan);
     buzz(12);
     const popColor = kind === 'dragonfly' ? '#00f5d4' : '#d4ff78';
-    this.particles.popup(hx, hy - this.view.cell * 0.6, '+' + gain + (this.combo > 1 ? ` (×${this.combo})` : ''), popColor, 17);
+    this._queueEat(hx, hy, burstOpts, gain, hx, hy - this.view.cell * 0.6, popColor, 17);
     if (this.mode === 'timeattack') {
       this.taTime += kind === 'dragonfly' ? CONFIG.taDragonflyBonus : kind === 'beetle' ? CONFIG.taBeetleBonus : CONFIG.taFireflyBonus;
     }
@@ -1001,15 +1008,37 @@ class Game {
     this.effects.magnet = Math.max(this.effects.magnet, 3000);
     const hx = this.view.cx(this.snake.head.x);
     const hy = this.view.cy(this.snake.head.y);
-    this.particles.burst(hx, hy, {
+    const burstOpts = {
       count: 24, colors: ['#fffdf4', '#f2e9cf', '#ffd54a', '#ffffff'], speed: 0.16, size: 2.6, life: 750, type: 'spark'
-    });
+    };
     if (this.save.settings.flash !== false) this.particles.flash('#f8f4e6', 0.09);
-    this.particles.popup(hx, hy - this.view.cell * 0.7, '+' + gain + ' 🥚', '#f2e9cf', 18);
     this.sound.golden(this._pan);
     buzz([14, 20, 14]);
+    this._queueEat(hx, hy, burstOpts, gain, hx, hy - this.view.cell * 0.7, '#f2e9cf', 18);
     this.checkBadges();
     this.maybeNewBest();
+  }
+
+  _queueEat(burstX, burstY, burstOpts, gain, popX, popY, popColor, popSize) {
+    this._eatsThisTick = (this._eatsThisTick || 0) + 1;
+    this._tickPoints = (this._tickPoints || 0) + gain;
+    if (!this._tickBurst || (burstOpts && (burstOpts.count ?? 0) > (this._tickBurst.opts?.count ?? 0))) {
+      this._tickBurst = { x: burstX, y: burstY, opts: burstOpts };
+    }
+    this._tickPopup = { x: popX, y: popY, color: popColor, size: popSize };
+    if (!this._inTick) {
+      this._flushTickEats();
+    }
+  }
+
+  _flushTickEats() {
+    if (this._eatsThisTick > 0 && this._tickBurst && this._tickPopup) {
+      this.particles.burst(this._tickBurst.x, this._tickBurst.y, this._tickBurst.opts);
+      const text = '+' + this._tickPoints + (this.combo > 1 ? ` (×${this.combo})` : '');
+      this.particles.popup(this._tickPopup.x, this._tickPopup.y, text, this._tickPopup.color, this._tickPopup.size);
+      this._tickBurst = null;
+      this._tickPopup = null;
+    }
   }
 
   maybeNewBest() {
@@ -1453,6 +1482,10 @@ class Game {
 
   update(dt) {
     this._eatsThisTick = 0;
+    this._tickPoints = 0;
+    this._tickBurst = null;
+    this._tickPopup = null;
+    this._inTick = true;
     this.time += dt;
     this.particles.update(dt);
     this.particles.ambient(this.state === 'menu' || this.state === 'playing' || this.state === 'countdown' ? this.biomeKey : null, this.view.w, this.view.h, dt);
@@ -1606,8 +1639,14 @@ class Game {
       this.acc -= sms;
       guard++;
       this.doStep();
-      if (this.state !== 'playing') return;
+      if (this.state !== 'playing') {
+        this._flushTickEats();
+        this._inTick = false;
+        return;
+      }
     }
+    this._flushTickEats();
+    this._inTick = false;
     if (guard >= CONFIG.maxStepCatchup && this.acc > sms) {
       this.acc = 0;
     }

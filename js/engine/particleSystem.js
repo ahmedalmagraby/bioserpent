@@ -25,11 +25,14 @@ function dotSprite(color) {
   return cv;
 }
 
+const MAX_PARTICLES = 200;
+
 class Particles {
   constructor() {
     this.list = [];
     this.popups = [];
     this._pool = [];   // recycled particle objects
+    this._batches = new Map();
     this.shakeMag = 0;
     this.shakeX = 0;
     this.shakeY = 0;
@@ -42,6 +45,7 @@ class Particles {
   clear() {
     this.list.length = 0;
     this.popups.length = 0;
+    for (const arr of this._batches.values()) arr.length = 0;
     this.shakeMag = 0;
     this.shakeX = 0;
     this.shakeY = 0;
@@ -72,7 +76,6 @@ class Particles {
     const speed = o.speed ?? 0.12;
     const up = o.up ?? 0;
     for (let i = 0; i < count; i++) {
-      if (this.list.length > 420) break;
       // Reuse a dead particle's object if one is pooled; otherwise allocate.
       const p = this._pool.pop() || {};
       const a = angle !== undefined ? angle + rand(-spread, spread) : rand(0, TAU);
@@ -89,7 +92,23 @@ class Particles {
       p.grav = grav;
       p.rot = rand(0, TAU);
       p.vr = rand(-0.004, 0.004);
-      this.list.push(p);
+
+      if (this.list.length < MAX_PARTICLES) {
+        this.list.push(p);
+      } else {
+        // Hard clamp at 200: shed oldest / lowest-life first
+        let minIdx = 0;
+        let minLife = this.list[0].life;
+        for (let j = 1; j < this.list.length; j++) {
+          if (this.list[j].life < minLife) {
+            minLife = this.list[j].life;
+            minIdx = j;
+          }
+        }
+        const old = this.list[minIdx];
+        if (this._pool.length < 256) this._pool.push(old);
+        this.list[minIdx] = p;
+      }
     }
   }
 
@@ -105,7 +124,8 @@ class Particles {
     if (REDUCED_MOTION) interval *= 3;
     while (this._ambAcc > interval) {
       this._ambAcc -= interval;
-      if (this.list.length > 380) break;
+      if (this.list.length >= 180) break;
+      if (this.list.length >= MAX_PARTICLES) break;
       if (key === 'rainforest') {
         this.list.push({
           x: rand(0, w), y: -10,
@@ -159,6 +179,20 @@ class Particles {
       p.rot += p.vr * dt;
       if (p.type === 'leaf') p.x += Math.sin(p.rot * 2) * 0.35;
     }
+    while (this.list.length > MAX_PARTICLES) {
+      let minIdx = 0;
+      let minLife = this.list[0].life;
+      for (let j = 1; j < this.list.length; j++) {
+        if (this.list[j].life < minLife) {
+          minLife = this.list[j].life;
+          minIdx = j;
+        }
+      }
+      const old = this.list[minIdx];
+      this.list[minIdx] = this.list[this.list.length - 1];
+      this.list.pop();
+      if (this._pool.length < 256) this._pool.push(old);
+    }
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const t = this.popups[i];
       t.life -= dt;
@@ -177,11 +211,15 @@ class Particles {
   }
 
   render(ctx) {
-    // Fast path for the dominant dot/spark/glow types: set globalAlpha
-    // directly (no save/restore) — those draws don't mutate transform.
-    for (const p of this.list) {
+    for (const arr of this._batches.values()) {
+      arr.length = 0;
+    }
+
+    // Pass 1: Draw leaves, bubbles, glow sprites, and bucket dots/sparks by color
+    for (let i = 0; i < this.list.length; i++) {
+      const p = this.list[i];
       const a = clamp01(p.life / p.maxLife);
-      if (p.type === 'glow' || p.type === 'spark') {
+      if (p.type === 'glow') {
         ctx.globalAlpha = a;
         const r = p.size * 3;
         ctx.drawImage(dotSprite(p.color), p.x - r, p.y - r, r * 2, r * 2);
@@ -204,14 +242,36 @@ class Particles {
         }
         ctx.restore();
       } else {
-        ctx.globalAlpha = a;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * a, 0, TAU);
-        ctx.fill();
+        // Dominant dot/spark particles: bucket for single path fill per color
+        let b = this._batches.get(p.color);
+        if (!b) {
+          b = [];
+          this._batches.set(p.color, b);
+        }
+        b.push(p);
       }
     }
+
+    // Pass 2: Batch same-color dot/spark draws into a single path per color
     ctx.globalAlpha = 1;
+    for (const [color, arr] of this._batches) {
+      if (arr.length === 0) continue;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (let i = 0; i < arr.length; i++) {
+        const p = arr[i];
+        const a = clamp01(p.life / p.maxLife);
+        const r = p.size * a;
+        if (r > 0.05) {
+          ctx.moveTo(p.x + r, p.y);
+          ctx.arc(p.x, p.y, r, 0, TAU);
+        }
+      }
+      ctx.fill();
+    }
+
+    // Popups: keep popups but don't strokeText when >4 popups (fill only)
+    const stroke = this.popups.length <= 4;
     for (const t of this.popups) {
       const a = clamp01(t.life / t.maxLife);
       const scale = 1 + (1 - a) * 0.25;
@@ -219,9 +279,11 @@ class Particles {
       ctx.globalAlpha = a;
       ctx.font = `800 ${t.size * scale}px 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = 'rgba(6, 12, 8, 0.75)';
-      ctx.strokeText(t.text, t.x, t.y);
+      if (stroke) {
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(6, 12, 8, 0.75)';
+        ctx.strokeText(t.text, t.x, t.y);
+      }
       ctx.fillStyle = t.color;
       ctx.fillText(t.text, t.x, t.y);
       ctx.restore();
