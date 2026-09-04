@@ -17,18 +17,51 @@ class FoodManager {
   constructor() {
     this.items = [];
     this.insects = [];
+    // Spatial hash for O(1) occupancy checks
+    this._grid = new Map();
+    this._gridDirty = true;
+    // Cache for nearest item (updated every N frames)
+    this._nearestCache = null;
+    this._nearestCacheFrame = 0;
+    this._cacheInterval = 6; // Update every 6 frames (~10fps at 60fps)
+    this._frameCount = 0;
+  }
+
+  _rebuildGrid() {
+    this._grid.clear();
+    const key = (x, y) => `${x},${y}`;
+    for (const it of this.items) {
+      const k = key(it.gx, it.gy);
+      this._grid.set(k, true);
+    }
+    for (const n of this.insects) {
+      const fx = Math.round(n.fx);
+      const fy = Math.round(n.fy);
+      const tx = n.tx;
+      const ty = n.ty;
+      this._grid.set(key(fx, fy), true);
+      this._grid.set(key(tx, ty), true);
+    }
+    this._gridDirty = false;
+  }
+
+  _markGridDirty() {
+    this._gridDirty = true;
   }
 
   reset() {
     this.items.length = 0;
     this.insects.length = 0;
+    this._grid.clear();
+    this._gridDirty = true;
+    this._nearestCache = null;
+    this._frameCount = 0;
   }
 
   occupied(x, y) {
-    if (this.items.some(i => i.gx === x && i.gy === y)) return true;
-    return this.insects.some(n =>
-      (Math.round(n.fx) === x && Math.round(n.fy) === y) ||
-      (n.tx === x && n.ty === y));
+    if (this._gridDirty) this._rebuildGrid();
+    const key = `${x},${y}`;
+    return this._grid.has(key);
   }
 
   randomFree(isFree) {
@@ -76,6 +109,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (c) {
       this.items.push({ type: 'apple', gx: c.x, gy: c.y, age: rand(0, 3000), hop: 0, pop: 0 });
+      this._markGridDirty();
+      this._nearestCache = null;
       return true;
     }
     return false;
@@ -86,6 +121,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (!c) return false;
     this.items.push({ type: 'golden', gx: c.x, gy: c.y, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
+    this._markGridDirty();
+    this._nearestCache = null;
     return true;
   }
 
@@ -103,6 +140,8 @@ class FoodManager {
       wing: rand(0, TAU),
       pop: 0
     });
+    this._markGridDirty();
+    this._nearestCache = null;
     return true;
   }
 
@@ -113,6 +152,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (!c) return false;
     this.items.push({ type: 'egg', gx: c.x, gy: c.y, age: 0, life: CONFIG.eggLifeMs, maxLife: CONFIG.eggLifeMs, hop: 0, pop: 0, wob: rand(0, TAU) });
+    this._markGridDirty();
+    this._nearestCache = null;
     if (particles && view) {
       particles.burst(view.cx(c.x), view.cy(c.y), {
         count: 10, colors: ['#f8f4e6', '#d9cba8', '#ffffff'], speed: 0.07, size: 2, life: 550
@@ -123,6 +164,9 @@ class FoodManager {
 
 
   magnetPull(head, canLand) {
+    // Only rebuild grid if dirty (lazy evaluation)
+    if (this._gridDirty) this._rebuildGrid();
+    
     for (const it of this.items) {
       const dx = head.x - it.gx;
       const dy = head.y - it.gy;
@@ -132,20 +176,27 @@ class FoodManager {
       let ny = it.gy;
       if (Math.abs(dx) >= Math.abs(dy)) nx += Math.sign(dx);
       else ny += Math.sign(dy);
-      if (canLand(nx, ny) && !this.occupied(nx, ny)) {
+      // Use direct grid lookup instead of full occupied() call
+      const key = `${nx},${ny}`;
+      if (canLand(nx, ny) && !this._grid.has(key)) {
         it.gx = nx;
         it.gy = ny;
         it.hop = 1;
+        // Mark grid dirty since item moved
+        this._grid.delete(`${it.gx - Math.sign(dx) || nx},${it.gy - Math.sign(dy) || ny}`);
+        this._grid.set(key, true);
       }
     }
   }
 
   update(dt, env) {
     const R = liveRows();
+    let itemsChanged = false;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
         this.items.splice(i, 1);
+        itemsChanged = true;
         continue;
       }
       it.age += dt;
@@ -160,6 +211,7 @@ class FoodManager {
             });
           }
           this.items.splice(i, 1);
+          itemsChanged = true;
         }
       } else if (it.type === 'egg') {
         it.wob += dt * 0.004;
@@ -169,6 +221,7 @@ class FoodManager {
           const px = it.gx;
           const py = it.gy;
           this.items.splice(i, 1);
+          itemsChanged = true;
           this.items.push({ type: 'golden', gx: px, gy: py, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
           if (env.particles) {
             env.particles.burst(env.view.cx(px), env.view.cy(py), {
@@ -178,6 +231,14 @@ class FoodManager {
         }
       }
     }
+    // Mark grid dirty if items changed
+    if (itemsChanged) {
+      this._markGridDirty();
+      this._nearestCache = null;
+    }
+    
+    // Track insect movement for grid updates
+    let insectsChanged = false;
     for (const n of this.insects) {
       n.age += dt;
       n.wing += dt * (n.kind === 'dragonfly' ? 0.08 : n.kind === 'firefly' ? 0.05 : 0.02);
@@ -186,6 +247,8 @@ class FoodManager {
         n.prog = Math.min(1, n.prog + dt / n.dur);
         continue;
       }
+      const oldFx = n.fx;
+      const oldFy = n.fy;
       n.fx = n.tx;
       n.fy = n.ty;
       let chosen = null;
@@ -225,13 +288,26 @@ class FoodManager {
         const baseDur = n.kind === 'dragonfly' ? 240 : n.kind === 'beetle' ? 320 : 460;
         if (fleeing) n.dur = baseDur * (n.kind === 'dragonfly' ? 0.5 : n.kind === 'beetle' ? 0.55 : 0.8);
         else n.dur = baseDur;
+        insectsChanged = true;
+      } else if (n.fx !== oldFx || n.fy !== oldFy) {
+        // Insect completed movement even without new target
+        insectsChanged = true;
       }
+    }
+    // Mark grid dirty if insects moved
+    if (insectsChanged) {
+      this._markGridDirty();
+      this._nearestCache = null;
     }
   }
 
   collideCell(gx, gy) {
     const idx = this.items.findIndex(i => i.gx === gx && i.gy === gy);
-    if (idx >= 0) return this.items.splice(idx, 1)[0];
+    if (idx >= 0) {
+      this._markGridDirty();
+      this._nearestCache = null;
+      return this.items.splice(idx, 1)[0];
+    }
     return null;
   }
 
@@ -251,6 +327,8 @@ class FoodManager {
       const p = this.insectPos(n);
       const threshold = n.kind === 'dragonfly' ? 0.88 : 0.66;
       if (Math.hypot(p.x - gx, p.y - gy) < threshold) {
+        this._markGridDirty();
+        this._nearestCache = null;
         return this.insects.splice(i, 1)[0];
       }
     }
@@ -259,6 +337,20 @@ class FoodManager {
 
 
   getNearestItemPx(px, py, cell) {
+    // Increment frame counter
+    this._frameCount++;
+    
+    // Return cached result if still valid
+    if (this._nearestCache && 
+        !this._gridDirty && 
+        this._frameCount - this._nearestCacheFrame < this._cacheInterval) {
+      // Recalculate distance to cached position for smooth interpolation
+      const cached = this._nearestCache;
+      const d = Math.hypot(cached.x - px, cached.y - py);
+      return { x: cached.x, y: cached.y, d };
+    }
+    
+    // Full calculation only when cache is stale or grid changed
     let best = null;
     let bd = Infinity;
     const consider = (x, y) => {
@@ -269,6 +361,12 @@ class FoodManager {
     for (const n of this.insects) {
       const p = this.insectPos(n);
       consider((p.x + 0.5) * cell, (p.y + 0.5) * cell);
+    }
+    
+    // Cache the result
+    if (best) {
+      this._nearestCache = { x: best.x, y: best.y, rawD: best.d };
+      this._nearestCacheFrame = this._frameCount;
     }
     return best;
   }

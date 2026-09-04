@@ -18,14 +18,32 @@ const TYPES = Object.keys(POWERUP_META);
 class PowerUpManager {
   constructor() {
     this.field = [];
+    // Spatial hash for O(1) occupancy checks
+    this._grid = new Map();
+    this._gridDirty = true;
+  }
+
+  _rebuildGrid() {
+    this._grid.clear();
+    for (const p of this.field) {
+      this._grid.set(`${p.gx},${p.gy}`, true);
+    }
+    this._gridDirty = false;
+  }
+
+  _markGridDirty() {
+    this._gridDirty = true;
   }
 
   reset() {
     this.field.length = 0;
+    this._grid.clear();
+    this._gridDirty = true;
   }
 
   occupied(x, y) {
-    return this.field.some(p => p.gx === x && p.gy === y);
+    if (this._gridDirty) this._rebuildGrid();
+    return this._grid.has(`${x},${y}`);
   }
 
   spawn(isFree, forceType) {
@@ -42,6 +60,7 @@ class PowerUpManager {
       if (!isFree(x, y)) continue;
       if (this.occupied(x, y)) continue;
       this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      this._markGridDirty();
       return;
     }
     for (let i = 0; i < 30; i++) {
@@ -50,6 +69,7 @@ class PowerUpManager {
       if (!isFree(x, y)) continue;
       if (this.occupied(x, y)) continue;
       this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      this._markGridDirty();
       return;
     }
     const freeCells = [];
@@ -68,26 +88,36 @@ class PowerUpManager {
     if (freeCells.length) {
       const c = pick(freeCells);
       this.field.push({ type: forceType ?? pick(TYPES), gx: c.x, gy: c.y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      this._markGridDirty();
     }
   }
 
   update(dt) {
     const R = liveRows();
+    let changed = false;
     for (let i = this.field.length - 1; i >= 0; i--) {
       const p = this.field[i];
       if (p.gy >= R || p.gx >= COLS || p.gy < 0 || p.gx < 0) {
         this.field.splice(i, 1);
+        changed = true;
         continue;
       }
       p.age += dt;
       p.life -= dt;
-      if (p.life <= 0) this.field.splice(i, 1);
+      if (p.life <= 0) {
+        this.field.splice(i, 1);
+        changed = true;
+      }
     }
+    if (changed) this._markGridDirty();
   }
 
   collide(gx, gy) {
     const idx = this.field.findIndex(p => p.gx === gx && p.gy === gy);
-    if (idx >= 0) return this.field.splice(idx, 1)[0];
+    if (idx >= 0) {
+      this._markGridDirty();
+      return this.field.splice(idx, 1)[0];
+    }
     return null;
   }
 

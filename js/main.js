@@ -221,6 +221,8 @@ class Game {
       const y = randi(m, liveRows() - 1 - m);
       if (!this.demoFood.occupied(x, y) && Math.abs(this.demoSnake.head.x - x) + Math.abs(this.demoSnake.head.y - y) >= 4) {
         this.demoFood.items.push({ type: 'apple', gx: x, gy: y, age: 0, hop: 0 });
+        this.demoFood._markGridDirty();
+        this.demoFood._nearestCache = null;
         return;
       }
     }
@@ -606,11 +608,17 @@ class Game {
     this.regenDecor();
     if (this.food && (this.state === 'playing' || this.state === 'countdown')) {
       const R = liveRows();
+      let itemsChanged = false;
       for (let i = this.food.items.length - 1; i >= 0; i--) {
         const it = this.food.items[i];
         if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
           this.food.items.splice(i, 1);
+          itemsChanged = true;
         }
+      }
+      if (itemsChanged) {
+        this.food._markGridDirty();
+        this.food._nearestCache = null;
       }
       if (!this.food.items.some(i => i.type === 'apple' && i.gy < R && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
         this.food.spawnApple((x, y) => this.isFreeCell(x, y));
