@@ -152,8 +152,10 @@ class Obstacles {
       const d = Math.max(Math.abs(hx - x), Math.abs(hy - y));
       if (d >= 1 && (best === null || d < best)) best = d;
     };
-    for (let dy = -2; dy <= 2; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
+    const maxD = (BS.CONFIG && BS.CONFIG.nearMissDist) || 1;
+    for (let dy = -maxD; dy <= maxD; dy++) {
+      for (let dx = -maxD; dx <= maxD; dx++) {
+        if (dx === 0 && dy === 0) continue;
         const nx = x + dx;
         const ny = y + dy;
         if (this.blocked(nx, ny)) consider(nx, ny);
@@ -209,14 +211,20 @@ class Obstacles {
       const cy = view.cy(s.y);
       const pulse = 1 + 0.14 * Math.sin(time * 0.004 + s.phase);
       const r = cell * 0.34 * pulse;
+      const sr = r * 2.2;
       ctx.save();
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.2);
-      g.addColorStop(0, 'rgba(156,80,220,0.4)');
-      g.addColorStop(1, 'rgba(156,80,220,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 2.2, 0, TAU);
-      ctx.fill();
+      const ssp = BS.glowSprite && BS.glowSprite('rgba(156,80,220,0.4)');
+      if (ssp) {
+        ctx.drawImage(ssp, cx - sr, cy - sr, sr * 2, sr * 2);
+      } else {
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
+        g.addColorStop(0, 'rgba(156,80,220,0.4)');
+        g.addColorStop(1, 'rgba(156,80,220,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, sr, 0, TAU);
+        ctx.fill();
+      }
       ctx.fillStyle = 'rgba(120,40,180,0.82)';
       ctx.strokeStyle = 'rgba(210,150,255,0.9)';
       ctx.lineWidth = cell * 0.045;

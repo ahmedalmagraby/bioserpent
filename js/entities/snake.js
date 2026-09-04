@@ -213,11 +213,11 @@ class Snake {
     }
     const willGrow = this.growPending > 0;
     // Self-collision: skipped by Ghost Phase power-up (ghost) or by Zen / daily ghosty (ghostSelf).
-    if (!env.ghost && !env.ghostSelf) {
-      const lim = this.cells.length - (willGrow ? 0 : 1);
-      for (let i = 0; i < lim; i++) {
-        const c = this.cells[i];
-        if (c.x === nx && c.y === ny) return { death: 'self' };
+    if (!env.ghost && !env.ghostSelf && this.isOccupied(nx, ny)) {
+      if (willGrow) return { death: 'self' };
+      const tail = this.cells[this.cells.length - 1];
+      if (nx !== tail.x || ny !== tail.y || (this.occ.get(Snake.occKey(nx, ny)) || 0) > 1) {
+        return { death: 'self' };
       }
     }
     // Obstacle collision: skipped only by the Ghost Phase power-up (ghost).
@@ -450,12 +450,16 @@ function drawBody(ctx, pts, cell, skin, o) {
   ctx.lineJoin = 'round';
   ctx.globalAlpha = alpha * 0.26;
   ctx.strokeStyle = '#000';
-  for (let i = n - 1; i > 0; i--) {
+  const chunk = 4;
+  for (let i = n - 1; i > 0; i -= chunk) {
     const u = i / (n - 1);
     ctx.lineWidth = maxW * taper(u) * 1.04;
     ctx.beginPath();
     ctx.moveTo(pts[i].px + 2, pts[i].py + 3);
-    ctx.lineTo(pts[i - 1].px + 2, pts[i - 1].py + 3);
+    const end = Math.max(0, i - chunk);
+    for (let j = i - 1; j >= end; j--) {
+      ctx.lineTo(pts[j].px + 2, pts[j].py + 3);
+    }
     ctx.stroke();
   }
   ctx.globalAlpha = alpha;
@@ -492,16 +496,25 @@ function drawBody(ctx, pts, cell, skin, o) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = skin.pattern;
   const step = Math.max(6, Math.round(2 * 1.15 / SAMPLE));
+  ctx.beginPath();
+  let hasDiamonds = false;
   for (let i = 8; i < n - 6; i += step) {
     const u = i / (n - 1);
     const s = maxW * taper(u) * 0.24;
     const ang = Math.atan2(pts[i - 1].py - pts[i + 1].py, pts[i - 1].px - pts[i + 1].px);
-    ctx.save();
-    ctx.translate(pts[i].px, pts[i].py);
-    ctx.rotate(ang + Math.PI / 4);
-    ctx.fillRect(-s, -s, s * 2, s * 2);
-    ctx.restore();
+    const d = s * 1.4142;
+    const ca = Math.cos(ang) * d;
+    const sa = Math.sin(ang) * d;
+    const px = pts[i].px;
+    const py = pts[i].py;
+    ctx.moveTo(px + ca, py + sa);
+    ctx.lineTo(px - sa, py + ca);
+    ctx.lineTo(px - ca, py - sa);
+    ctx.lineTo(px + sa, py - ca);
+    ctx.closePath();
+    hasDiamonds = true;
   }
+  if (hasDiamonds) ctx.fill();
   ctx.restore();
 }
 

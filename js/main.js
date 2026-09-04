@@ -124,9 +124,13 @@ const BIOME_ORDER = ['rainforest', 'oasis', 'cavern', 'reef'];
 
 const DIR_VALUES = Object.values(DIRS);
 
+let _lastBuzz = 0;
 function buzz(pattern) {
   const s = game.save.settings;
   if (!s || s.muted || s.sfx === 0) return;
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  if (now - _lastBuzz < 40) return;
+  _lastBuzz = now;
   try { navigator.vibrate && navigator.vibrate(pattern); } catch (_) {}
 }
 
@@ -373,6 +377,7 @@ class Game {
   }
 
   checkBadges() {
+    if (this.save.badges.length >= BADGES.length) return;
     for (const b of BADGES) {
       if (!this.save.badges.includes(b.id) && b.test(this.save)) {
         this.save.badges.push(b.id);
@@ -917,12 +922,14 @@ class Game {
     }
     const hx = this.view.cx(this.snake.head.x);
     const hy = this.view.cy(this.snake.head.y);
+    this._eatsThisTick = (this._eatsThisTick || 0) + 1;
+    const isRapid = this._eatsThisTick > 1;
     if (kind === 'apple') {
-      this.particles.burst(hx, hy, { count: 14, colors: ['#e53935', '#ff8a80', '#ffcdd2'], speed: 0.14, size: 2.4, life: 550, grav: 0.0004 });
+      this.particles.burst(hx, hy, { count: isRapid ? 8 : 14, colors: ['#e53935', '#ff8a80', '#ffcdd2'], speed: 0.14, size: 2.4, life: 550, grav: 0.0004 });
       this.sound.bite(this._pan);
       buzz(12);
     } else {
-      this.particles.burst(hx, hy, { count: 22, colors: ['#ffd54a', '#fff59d', '#ffffff'], speed: 0.17, size: 2.6, life: 750, type: 'spark' });
+      this.particles.burst(hx, hy, { count: isRapid ? 12 : 22, colors: ['#ffd54a', '#fff59d', '#ffffff'], speed: 0.17, size: 2.6, life: 750, type: 'spark' });
       if (this.save.settings.flash !== false) this.particles.flash('#ffd54a', 0.08);
       this.sound.golden(this._pan);
       buzz([16, 24, 16]);
@@ -1318,14 +1325,9 @@ class Game {
     const pw = this.powerups.collide(h.x, h.y);
     if (pw) this.activatePower(pw.type);
     // Player head vs rival body/head — mutual destruction
-    if (this.rival) {
-      const rc = this.rival.snake.cells;
-      for (let i = 0; i < rc.length; i++) {
-        if (rc[i].x === h.x && rc[i].y === h.y) {
-          this.die('rival');
-          return;
-        }
-      }
+    if (this.rival && this.rival.snake.isOccupied(h.x, h.y)) {
+      this.die('rival');
+      return;
     }
     const newLen = this.snake.length;
     if (newLen !== this.lastLen) {
@@ -1450,6 +1452,7 @@ class Game {
   }
 
   update(dt) {
+    this._eatsThisTick = 0;
     this.time += dt;
     this.particles.update(dt);
     this.particles.ambient(this.state === 'menu' || this.state === 'playing' || this.state === 'countdown' ? this.biomeKey : null, this.view.w, this.view.h, dt);
@@ -1604,6 +1607,9 @@ class Game {
       guard++;
       this.doStep();
       if (this.state !== 'playing') return;
+    }
+    if (guard >= CONFIG.maxStepCatchup && this.acc > sms) {
+      this.acc = 0;
     }
     this.tInterp = clamp(this.acc / sms, 0, 1);
     const near = this.food.getNearestItemPx(

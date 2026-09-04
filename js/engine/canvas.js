@@ -28,6 +28,25 @@ function rowsFor(availW, availH, forced) {
   return clamp(idealRows, ROWS_MIN, ROWS_MAX);
 }
 
+const _glowCache = new Map();
+function glowSprite(color) {
+  let cv = _glowCache.get(color);
+  if (cv) return cv;
+  if (typeof document === 'undefined' || !document.createElement) return null;
+  const r = 48;
+  cv = document.createElement('canvas');
+  cv.width = r * 2;
+  cv.height = r * 2;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(r, r, 0, r, r, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, r * 2, r * 2);
+  _glowCache.set(color, cv);
+  return cv;
+}
+
 const CONFIG = {
   stepMs: { classic: 145, timeattack: 125, zen: 165, demo: 135 },
   minStepMs: 68,
@@ -151,6 +170,6 @@ class View {
 }
 
 
-Object.assign(BS, { COLS, ROWS: BASE_ROWS, BASE_ROWS, ROWS_MIN, ROWS_MAX, TAU, CONFIG, REDUCED_MOTION, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View });
+Object.assign(BS, { COLS, ROWS: BASE_ROWS, BASE_ROWS, ROWS_MIN, ROWS_MAX, TAU, CONFIG, REDUCED_MOTION, clamp, lerp, rand, randi, pick, easeOutCubic, lerpColor, mulberry32, View, glowSprite });
 
 })(window.BS);

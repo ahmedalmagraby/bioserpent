@@ -94,6 +94,7 @@ class Particles {
   }
 
   popup(x, y, text, color = '#fff', size = 16) {
+    if (this.popups.length >= 8) this.popups.shift();
     this.popups.push({ x, y, text, color, size, life: 1100, maxLife: 1100 });
   }
 
@@ -222,8 +223,6 @@ class Particles {
       ctx.strokeStyle = 'rgba(6, 12, 8, 0.75)';
       ctx.strokeText(t.text, t.x, t.y);
       ctx.fillStyle = t.color;
-      ctx.shadowColor = t.color;
-      ctx.shadowBlur = 8;
       ctx.fillText(t.text, t.x, t.y);
       ctx.restore();
     }

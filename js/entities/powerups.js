@@ -102,13 +102,19 @@ class PowerUpManager {
       ctx.save();
       ctx.globalAlpha = blink;
       const pulse = 0.8 + 0.2 * Math.sin(time * 0.006 + p.gy);
-      const g = ctx.createRadialGradient(x, y, 0, x, y, cell * 0.95 * pulse);
-      g.addColorStop(0, meta.color + '66');
-      g.addColorStop(1, meta.color + '00');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x, y, cell * 0.95 * pulse, 0, TAU);
-      ctx.fill();
+      const pr = cell * 0.95 * pulse;
+      const psp = BS.glowSprite && BS.glowSprite(meta.color + '66');
+      if (psp) {
+        ctx.drawImage(psp, x - pr, y - pr, pr * 2, pr * 2);
+      } else {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, pr);
+        g.addColorStop(0, meta.color + '66');
+        g.addColorStop(1, meta.color + '00');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, pr, 0, TAU);
+        ctx.fill();
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
       ctx.ellipse(x, view.cy(p.gy) + cell * 0.32, cell * 0.24, cell * 0.08, 0, 0, TAU);

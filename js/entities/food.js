@@ -363,13 +363,19 @@ class FoodManager {
         const pulse = 0.85 + 0.15 * Math.sin(time * 0.007 + it.gx);
         const blink = it.life < 2600 ? (Math.sin(time * 0.025) > -0.3 ? 1 : 0.25) : 1;
         ctx.globalAlpha = blink;
-        const g = ctx.createRadialGradient(x, y, 0, x, y, cell * 0.9 * pulse);
-        g.addColorStop(0, 'rgba(255,213,74,0.75)');
-        g.addColorStop(1, 'rgba(255,213,74,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(x, y, cell * 0.9 * pulse, 0, TAU);
-        ctx.fill();
+        const gr = cell * 0.9 * pulse;
+        const sp = BS.glowSprite && BS.glowSprite('rgba(255,213,74,0.75)');
+        if (sp) {
+          ctx.drawImage(sp, x - gr, y - gr, gr * 2, gr * 2);
+        } else {
+          const g = ctx.createRadialGradient(x, y, 0, x, y, gr);
+          g.addColorStop(0, 'rgba(255,213,74,0.75)');
+          g.addColorStop(1, 'rgba(255,213,74,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(x, y, gr, 0, TAU);
+          ctx.fill();
+        }
         const frac = Math.max(0, it.life / (it.maxLife || CONFIG.goldenLifeMs));
         ctx.strokeStyle = frac < 0.35 ? '#ff6b6b' : '#ffd54a';
         ctx.lineWidth = cell * 0.06;
@@ -429,9 +435,11 @@ class FoodManager {
         ctx.beginPath();
         ctx.arc(-cell * 0.08, 0, cell * 0.09, 0, TAU);
         ctx.fill();
+        ctx.fillStyle = 'rgba(212,255,120,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(cell * 0.08, 0, cell * 0.18, cell * 0.14, 0, 0, TAU);
+        ctx.fill();
         ctx.fillStyle = '#d4ff78';
-        ctx.shadowColor = '#d4ff78';
-        ctx.shadowBlur = cell * 0.3;
         ctx.beginPath();
         ctx.ellipse(cell * 0.08, 0, cell * 0.14, cell * 0.1, 0, 0, TAU);
         ctx.fill();

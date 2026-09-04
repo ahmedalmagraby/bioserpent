@@ -46,7 +46,8 @@
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.15); }
 }
-#hudCombo.pulse { animation: comboPulse 0.3s ease; }
+#hudCombo.pulse,
+#hudCombo.pulse-alt { animation: comboPulse 0.3s ease; }
 
 @keyframes urgentPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -95,7 +96,8 @@
   35% { transform: scale(1.22); color: var(--accent); text-shadow: 0 0 14px rgba(126, 224, 138, 0.9); }
   100% { transform: scale(1); }
 }
-.score-bump { animation: scoreBump 0.28s ease-out; }
+.score-bump,
+.score-bump-alt { animation: scoreBump 0.28s ease-out; }
 
 @keyframes buffExpiring {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -115,6 +117,9 @@
   .mode-card.hero-mode,
   .card,
   #hudCombo.pulse,
+  #hudCombo.pulse-alt,
+  .score-bump,
+  .score-bump-alt,
   .pop-in,
   .toast,
   .screen,

@@ -38,6 +38,7 @@ class UIManager {
       badgeProgText: this.$('badgeProgText'),
       badgeProgBar: this.$('badgeProgBar'),
       hudBar: this.$('hudBar'),
+      hudBarFill: this.$('hudBar') ? (this.$('hudBar').querySelector('i') || this.$('hudBar').firstChild) : null,
       overTitle: this.$('overTitle'),
       overMode: this.$('overMode'),
       overStats: this.$('overStats'),
@@ -382,9 +383,13 @@ class UIManager {
       this._lastScore = d.score;
       this.el.score.textContent = d.score;
       if (prev !== undefined && d.score > prev) {
-        this.el.score.classList.remove('score-bump');
-        void this.el.score.offsetWidth;
-        this.el.score.classList.add('score-bump');
+        if (this.el.score.classList.contains('score-bump')) {
+          this.el.score.classList.remove('score-bump');
+          this.el.score.classList.add('score-bump-alt');
+        } else {
+          this.el.score.classList.remove('score-bump-alt');
+          this.el.score.classList.add('score-bump');
+        }
       }
     }
     if (d.best !== undefined) this.el.best.textContent = d.best;
@@ -393,10 +398,15 @@ class UIManager {
       if (d.combo) {
         this.el.combo.textContent = d.combo;
         this.el.combo.classList.remove('vis-hidden', 'hidden');
-        this.el.combo.classList.remove('pulse');
-        void this.el.combo.offsetWidth;
-        this.el.combo.classList.add('pulse');
+        if (this.el.combo.classList.contains('pulse')) {
+          this.el.combo.classList.remove('pulse');
+          this.el.combo.classList.add('pulse-alt');
+        } else {
+          this.el.combo.classList.remove('pulse-alt');
+          this.el.combo.classList.add('pulse');
+        }
       } else {
+        this.el.combo.classList.remove('pulse', 'pulse-alt');
         this.el.combo.classList.add('vis-hidden');
       }
     }
@@ -404,9 +414,11 @@ class UIManager {
       const bar = this.el.hudBar;
       if (d.bar) {
         bar.classList.remove('vis-hidden', 'hidden');
-        const fill = bar.querySelector('i') || bar.firstChild;
-        fill.style.width = Math.max(0, Math.min(1, d.bar.frac)) * 100 + '%';
-        fill.style.background = d.bar.color || 'var(--accent)';
+        const fill = this.el.hudBarFill || (this.el.hudBarFill = bar.querySelector('i') || bar.firstChild);
+        if (fill) {
+          fill.style.width = Math.max(0, Math.min(1, d.bar.frac)) * 100 + '%';
+          fill.style.background = d.bar.color || 'var(--accent)';
+        }
       } else {
         bar.classList.add('vis-hidden');
       }

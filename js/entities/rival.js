@@ -135,9 +135,10 @@ class Rival {
     const target = env.target ? idx(clamp(env.target.gx, 0, W - 1), clamp(env.target.gy, 0, R - 1)) : -1;
     seen[start] = 1;
     const q = [start];
+    let qHead = 0;
     let found = false;
-    while (q.length) {
-      const cur = q.shift();
+    while (qHead < q.length) {
+      const cur = q[qHead++];
       if (cur === target) { found = true; break; }
       const cx2 = cur % W;
       const cy2 = (cur / W) | 0;
@@ -226,21 +227,28 @@ class Rival {
   floodFillSize(x0, y0, blocked, W, R, wrap) {
     if (x0 < 0 || y0 < 0 || x0 >= W || y0 >= R) return 0;
     if (blocked[y0 * W + x0]) return 0;
-    const seen = new Set([y0 * W + x0]);
-    const q = [[x0, y0]];
+    if (!this._ffSeen || this._ffSeen.length !== W * R) {
+      this._ffSeen = new Uint8Array(W * R);
+    } else {
+      this._ffSeen.fill(0);
+    }
+    const seen = this._ffSeen;
+    const start = y0 * W + x0;
+    seen[start] = 1;
+    const q = [start];
     let n = 0;
     while (q.length) {
-      const pair = q.pop();
-      const cx = pair[0], cy = pair[1];
+      const cur = q.pop();
+      const cx = cur % W, cy = (cur / W) | 0;
       n++;
       for (const d of DIR_VALUES) {
         const nx = wrap ? (cx + d.x + W) % W : cx + d.x;
         const ny = wrap ? (cy + d.y + R) % R : cy + d.y;
         if (nx < 0 || ny < 0 || nx >= W || ny >= R) continue;
         const ni = ny * W + nx;
-        if (!seen.has(ni) && !blocked[ni]) {
-          seen.add(ni);
-          q.push([nx, ny]);
+        if (!seen[ni] && !blocked[ni]) {
+          seen[ni] = 1;
+          q.push(ni);
         }
       }
     }
