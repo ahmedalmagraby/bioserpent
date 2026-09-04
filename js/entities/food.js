@@ -13,25 +13,49 @@ const CARDINALS = [
   { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
 ];
 
+const _gradCache = new Map();
+
 class FoodManager {
   constructor() {
     this.items = [];
     this.insects = [];
+    this.occ = new Set();
+    this._ver = 0;
+    this._cachedNearest = null;
   }
 
   reset() {
     this.items.length = 0;
     this.insects.length = 0;
+    this.occ.clear();
+    this._ver++;
+    this._cachedNearest = null;
+  }
+
+  static occKey(x, y) { return y * 4096 + x; }
+
+  _syncOcc() {
+    this.occ.clear();
+    for (let i = 0; i < this.items.length; i++) {
+      const it = this.items[i];
+      this.occ.add(it.gy * 4096 + it.gx);
+    }
+    for (let i = 0; i < this.insects.length; i++) {
+      const n = this.insects[i];
+      this.occ.add(Math.round(n.fy) * 4096 + Math.round(n.fx));
+      this.occ.add(n.ty * 4096 + n.tx);
+    }
   }
 
   occupied(x, y) {
-    if (this.items.some(i => i.gx === x && i.gy === y)) return true;
-    return this.insects.some(n =>
-      (Math.round(n.fx) === x && Math.round(n.fy) === y) ||
-      (n.tx === x && n.ty === y));
+    if (!this.occ.size && (this.items.length > 0 || this.insects.length > 0)) {
+      this._syncOcc();
+    }
+    return this.occ.has(y * 4096 + x);
   }
 
   randomFree(isFree) {
+    this._syncOcc();
     const m = CONFIG.spawnMargin || 0;
     const x0 = Math.min(m, COLS - 1);
     const x1 = Math.max(x0, COLS - 1 - m);
@@ -76,6 +100,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (c) {
       this.items.push({ type: 'apple', gx: c.x, gy: c.y, age: rand(0, 3000), hop: 0, pop: 0 });
+      this.occ.add(c.y * 4096 + c.x);
+      this._ver++;
       return true;
     }
     return false;
@@ -86,6 +112,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (!c) return false;
     this.items.push({ type: 'golden', gx: c.x, gy: c.y, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
+    this.occ.add(c.y * 4096 + c.x);
+    this._ver++;
     return true;
   }
 
@@ -103,6 +131,8 @@ class FoodManager {
       wing: rand(0, TAU),
       pop: 0
     });
+    this.occ.add(c.y * 4096 + c.x);
+    this._ver++;
     return true;
   }
 
@@ -113,6 +143,8 @@ class FoodManager {
     const c = this.randomFree(isFree);
     if (!c) return false;
     this.items.push({ type: 'egg', gx: c.x, gy: c.y, age: 0, life: CONFIG.eggLifeMs, maxLife: CONFIG.eggLifeMs, hop: 0, pop: 0, wob: rand(0, TAU) });
+    this.occ.add(c.y * 4096 + c.x);
+    this._ver++;
     if (particles && view) {
       particles.burst(view.cx(c.x), view.cy(c.y), {
         count: 10, colors: ['#f8f4e6', '#d9cba8', '#ffffff'], speed: 0.07, size: 2, life: 550
@@ -123,7 +155,9 @@ class FoodManager {
 
 
   magnetPull(head, canLand) {
-    for (const it of this.items) {
+    this._syncOcc();
+    for (let i = 0; i < this.items.length; i++) {
+      const it = this.items[i];
       const dx = head.x - it.gx;
       const dy = head.y - it.gy;
       const dist = Math.abs(dx) + Math.abs(dy);
@@ -133,19 +167,24 @@ class FoodManager {
       if (Math.abs(dx) >= Math.abs(dy)) nx += Math.sign(dx);
       else ny += Math.sign(dy);
       if (canLand(nx, ny) && !this.occupied(nx, ny)) {
+        this.occ.delete(it.gy * 4096 + it.gx);
         it.gx = nx;
         it.gy = ny;
         it.hop = 1;
+        this.occ.add(ny * 4096 + nx);
+        this._ver++;
       }
     }
   }
 
   update(dt, env) {
     const R = liveRows();
+    let itemsChanged = false;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
         this.items.splice(i, 1);
+        itemsChanged = true;
         continue;
       }
       it.age += dt;
@@ -160,6 +199,7 @@ class FoodManager {
             });
           }
           this.items.splice(i, 1);
+          itemsChanged = true;
         }
       } else if (it.type === 'egg') {
         it.wob += dt * 0.004;
@@ -170,6 +210,7 @@ class FoodManager {
           const py = it.gy;
           this.items.splice(i, 1);
           this.items.push({ type: 'golden', gx: px, gy: py, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
+          itemsChanged = true;
           if (env.particles) {
             env.particles.burst(env.view.cx(px), env.view.cy(py), {
               count: 16, colors: ['#f8f4e6', '#ffd54a', '#fff59d'], speed: 0.12, size: 2.2, life: 650, type: 'spark'
@@ -177,6 +218,12 @@ class FoodManager {
           }
         }
       }
+    }
+    if (itemsChanged) {
+      this._ver++;
+      this._syncOcc();
+    } else {
+      this._syncOcc();
     }
     for (const n of this.insects) {
       n.age += dt;
@@ -219,8 +266,11 @@ class FoodManager {
       }
       if (chosen) {
         n.dir = chosen;
+        this.occ.delete(n.ty * 4096 + n.tx);
         n.tx = n.fx + chosen.x;
         n.ty = n.fy + chosen.y;
+        this.occ.add(n.ty * 4096 + n.tx);
+        this._ver++;
         n.prog = 0;
         const baseDur = n.kind === 'dragonfly' ? 240 : n.kind === 'beetle' ? 320 : 460;
         if (fleeing) n.dur = baseDur * (n.kind === 'dragonfly' ? 0.5 : n.kind === 'beetle' ? 0.55 : 0.8);
@@ -231,7 +281,12 @@ class FoodManager {
 
   collideCell(gx, gy) {
     const idx = this.items.findIndex(i => i.gx === gx && i.gy === gy);
-    if (idx >= 0) return this.items.splice(idx, 1)[0];
+    if (idx >= 0) {
+      const it = this.items.splice(idx, 1)[0];
+      this.occ.delete(gy * 4096 + gx);
+      this._ver++;
+      return it;
+    }
     return null;
   }
 
@@ -250,8 +305,13 @@ class FoodManager {
       const n = this.insects[i];
       const p = this.insectPos(n);
       const threshold = n.kind === 'dragonfly' ? 0.88 : 0.66;
-      if (Math.hypot(p.x - gx, p.y - gy) < threshold) {
-        return this.insects.splice(i, 1)[0];
+      const dx = p.x - gx;
+      const dy = p.y - gy;
+      if (dx * dx + dy * dy < threshold * threshold) {
+        const ins = this.insects.splice(i, 1)[0];
+        this._ver++;
+        this._syncOcc();
+        return ins;
       }
     }
     return null;
@@ -259,18 +319,42 @@ class FoodManager {
 
 
   getNearestItemPx(px, py, cell) {
-    let best = null;
-    let bd = Infinity;
-    const consider = (x, y) => {
-      const d = Math.hypot(x - px, y - py);
-      if (d < bd) { bd = d; best = { x, y, d }; }
-    };
-    for (const it of this.items) consider((it.gx + 0.5) * cell, (it.gy + 0.5) * cell);
-    for (const n of this.insects) {
-      const p = this.insectPos(n);
-      consider((p.x + 0.5) * cell, (p.y + 0.5) * cell);
+    if (this._cachedNearest &&
+        this._cachedNearest.cell === cell &&
+        this._cachedNearest.ver === this._ver &&
+        Math.abs(this._cachedNearest.px - px) < 1 &&
+        Math.abs(this._cachedNearest.py - py) < 1) {
+      return this._cachedNearest.res;
     }
-    return best;
+    let best = null;
+    let bd2 = Infinity;
+    for (let i = 0; i < this.items.length; i++) {
+      const it = this.items[i];
+      const x = (it.gx + 0.5) * cell;
+      const y = (it.gy + 0.5) * cell;
+      const dx = x - px;
+      const dy = y - py;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bd2) {
+        bd2 = d2;
+        best = { x, y, d2 };
+      }
+    }
+    for (let i = 0; i < this.insects.length; i++) {
+      const p = this.insectPos(this.insects[i]);
+      const x = (p.x + 0.5) * cell;
+      const y = (p.y + 0.5) * cell;
+      const dx = x - px;
+      const dy = y - py;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bd2) {
+        bd2 = d2;
+        best = { x, y, d2 };
+      }
+    }
+    const res = best ? { x: best.x, y: best.y, d: Math.sqrt(best.d2) } : null;
+    this._cachedNearest = { px, py, cell, ver: this._ver, res };
+    return res;
   }
 
   render(ctx, view, time) {
@@ -291,36 +375,41 @@ class FoodManager {
       ctx.ellipse(view.cx(it.gx), view.cy(it.gy) + cell * 0.3, cell * 0.24, cell * 0.07, 0, 0, TAU);
       ctx.fill();
       if (it.type === 'apple') {
+        let g = _gradCache.get(`apple_${cell}`);
+        if (!g) {
+          g = ctx.createRadialGradient(-cell * 0.1, -cell * 0.12, 1, 0, 0, cell * 0.36);
+          g.addColorStop(0, '#ff8a80');
+          g.addColorStop(0.5, '#e53935');
+          g.addColorStop(1, '#c62828');
+          _gradCache.set(`apple_${cell}`, g);
+        }
+        ctx.translate(x, y);
         ctx.fillStyle = '#c62828';
         ctx.strokeStyle = '#7f1616';
         ctx.lineWidth = cell * 0.04;
         ctx.beginPath();
-        ctx.arc(x, y, cell * 0.32, 0, TAU);
+        ctx.arc(0, 0, cell * 0.32, 0, TAU);
         ctx.fill();
         ctx.stroke();
-        const g = ctx.createRadialGradient(x - cell * 0.1, y - cell * 0.12, 1, x, y, cell * 0.36);
-        g.addColorStop(0, '#ff8a80');
-        g.addColorStop(0.5, '#e53935');
-        g.addColorStop(1, '#c62828');
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(x, y, cell * 0.32, 0, TAU);
+        ctx.arc(0, 0, cell * 0.32, 0, TAU);
         ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.globalAlpha = 0.55;
         ctx.beginPath();
-        ctx.ellipse(x - cell * 0.11, y - cell * 0.12, cell * 0.07, cell * 0.045, -0.6, 0, TAU);
+        ctx.ellipse(-cell * 0.11, -cell * 0.12, cell * 0.07, cell * 0.045, -0.6, 0, TAU);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.strokeStyle = '#6d4c41';
         ctx.lineWidth = cell * 0.05;
         ctx.beginPath();
-        ctx.moveTo(x, y - cell * 0.28);
-        ctx.quadraticCurveTo(x + cell * 0.03, y - cell * 0.42, x + cell * 0.08, y - cell * 0.46);
+        ctx.moveTo(0, -cell * 0.28);
+        ctx.quadraticCurveTo(cell * 0.03, -cell * 0.42, cell * 0.08, -cell * 0.46);
         ctx.stroke();
         ctx.fillStyle = '#43a047';
         ctx.beginPath();
-        ctx.ellipse(x + cell * 0.17, y - cell * 0.42, cell * 0.13, cell * 0.06, -0.5, 0, TAU);
+        ctx.ellipse(cell * 0.17, -cell * 0.42, cell * 0.13, cell * 0.06, -0.5, 0, TAU);
         ctx.fill();
       } else if (it.type === 'egg') {
         // Serpent Egg: cream shell, speckles, wobble intensifies near hatching
@@ -332,10 +421,14 @@ class FoodManager {
         ctx.beginPath();
         ctx.ellipse(0, cell * 0.3, cell * 0.22, cell * 0.06, 0, 0, TAU);
         ctx.fill();
-        const g = ctx.createRadialGradient(-cell * 0.07, -cell * 0.09, 1, 0, 0, cell * 0.34);
-        g.addColorStop(0, '#fffdf4');
-        g.addColorStop(0.7, '#f2e9cf');
-        g.addColorStop(1, '#d9cba8');
+        let g = _gradCache.get(`egg_${cell}`);
+        if (!g) {
+          g = ctx.createRadialGradient(-cell * 0.07, -cell * 0.09, 1, 0, 0, cell * 0.34);
+          g.addColorStop(0, '#fffdf4');
+          g.addColorStop(0.7, '#f2e9cf');
+          g.addColorStop(1, '#d9cba8');
+          _gradCache.set(`egg_${cell}`, g);
+        }
         ctx.fillStyle = g;
         ctx.strokeStyle = '#a89a72';
         ctx.lineWidth = cell * 0.04;
@@ -424,12 +517,12 @@ class FoodManager {
         const flap = Math.sin(n.wing) * 0.7;
         ctx.fillStyle = 'rgba(220,240,255,0.75)';
         for (const s of [-1, 1]) {
-          ctx.save();
-          ctx.rotate(s * (0.9 + flap * s));
+          const rWing = s * (0.9 + flap * s);
+          ctx.rotate(rWing);
           ctx.beginPath();
           ctx.ellipse(cell * 0.12, 0, cell * 0.16, cell * 0.06, 0, 0, TAU);
           ctx.fill();
-          ctx.restore();
+          ctx.rotate(-rWing);
         }
         ctx.fillStyle = '#33691e';
         ctx.beginPath();
@@ -453,27 +546,31 @@ class FoodManager {
         ctx.lineWidth = cell * 0.02;
         for (const s of [-1, 1]) {
           // Front wing
-          ctx.save();
-          ctx.rotate(s * (1.1 + flap * s));
+          const rFront = s * (1.1 + flap * s);
+          ctx.rotate(rFront);
           ctx.beginPath();
           ctx.ellipse(0, s * cell * 0.22, cell * 0.07, cell * 0.26, s * 0.2, 0, TAU);
           ctx.fill();
           ctx.stroke();
-          ctx.restore();
+          ctx.rotate(-rFront);
           // Back wing
-          ctx.save();
-          ctx.rotate(s * (1.5 - flap * s * 0.8));
+          const rBack = s * (1.5 - flap * s * 0.8);
+          ctx.rotate(rBack);
           ctx.beginPath();
           ctx.ellipse(-cell * 0.06, s * cell * 0.18, cell * 0.06, cell * 0.22, -s * 0.2, 0, TAU);
           ctx.fill();
           ctx.stroke();
-          ctx.restore();
+          ctx.rotate(-rBack);
         }
         // Long slender iridescent body
-        const grad = ctx.createLinearGradient(-cell * 0.3, 0, cell * 0.25, 0);
-        grad.addColorStop(0, '#00b4d8');
-        grad.addColorStop(0.5, '#48cae4');
-        grad.addColorStop(1, '#90e0ef');
+        let grad = _gradCache.get(`dragonfly_${cell}`);
+        if (!grad) {
+          grad = ctx.createLinearGradient(-cell * 0.3, 0, cell * 0.25, 0);
+          grad.addColorStop(0, '#00b4d8');
+          grad.addColorStop(0.5, '#48cae4');
+          grad.addColorStop(1, '#90e0ef');
+          _gradCache.set(`dragonfly_${cell}`, grad);
+        }
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.ellipse(-cell * 0.08, 0, cell * 0.28, cell * 0.05, 0, 0, TAU);

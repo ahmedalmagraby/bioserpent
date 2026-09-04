@@ -68,15 +68,25 @@ function taper(u) {
 }
 
 function chaikin(pts) {
-  if (pts.length < 3) return pts;
+  const len = pts.length;
+  if (len < 3) return pts;
   const out = [pts[0]];
-  for (let i = 0; i < pts.length - 1; i++) {
+  for (let i = 0; i < len - 1; i++) {
     const a = pts[i];
     const b = pts[i + 1];
-    out.push({ px: a.px * 0.75 + b.px * 0.25, py: a.py * 0.75 + b.py * 0.25 });
-    out.push({ px: a.px * 0.25 + b.px * 0.75, py: a.py * 0.25 + b.py * 0.75 });
+    const prev = i > 0 ? pts[i - 1] : null;
+    const next = i < len - 2 ? pts[i + 2] : null;
+    const straightBefore = prev && Math.abs((b.px - a.px) * (a.py - prev.py) - (b.py - a.py) * (a.px - prev.px)) < 0.1 && ((b.px - a.px) * (a.px - prev.px) + (b.py - a.py) * (a.py - prev.py)) > 0;
+    const straightAfter = next && Math.abs((next.px - b.px) * (b.py - a.py) - (next.py - b.py) * (b.px - a.px)) < 0.1 && ((next.px - b.px) * (b.px - a.px) + (next.py - b.py) * (b.py - a.py)) > 0;
+
+    if (straightBefore && straightAfter) {
+      out.push(b);
+    } else {
+      out.push({ px: a.px * 0.75 + b.px * 0.25, py: a.py * 0.75 + b.py * 0.25 });
+      out.push({ px: a.px * 0.25 + b.px * 0.75, py: a.py * 0.25 + b.py * 0.75 });
+    }
   }
-  out.push(pts[pts.length - 1]);
+  out.push(pts[len - 1]);
   return out;
 }
 
@@ -289,14 +299,14 @@ class Snake {
     const raw = [{ x: hx, y: hy }];
     for (let i = 1; i < this.path.length; i++) raw.push(this.path[i]);
     const strands = [];
-    let cur = [{ x: hx, y: hy }];
+    let cur = [{ px: view.cx(hx), py: view.cy(hy) }];
     let acc = 0;
     let next = SAMPLE;
     for (let i = 1; i < raw.length; i++) {
       const a = raw[i - 1];
       const b = raw[i];
       if (b.cut || a.cut) {
-        cur.push({ x: b.x, y: b.y });
+        cur.push({ px: view.cx(b.x), py: view.cy(b.y) });
         strands.push(cur);
         cur = [];
         acc += 1;
@@ -308,7 +318,7 @@ class Snake {
       if (seg === 0) continue;
       while (acc + seg >= next && next <= total) {
         const f = (next - acc) / seg;
-        cur.push({ x: a.x + dx * f, y: a.y + dy * f });
+        cur.push({ px: view.cx(a.x + dx * f), py: view.cy(a.y + dy * f) });
         next += SAMPLE;
       }
       acc += seg;
@@ -320,9 +330,9 @@ class Snake {
       const s = strands[si];
       if (s.length < 2) {
         if (si !== 0) continue;
-        s.push({ x: s[0].x - this.dir.x * SAMPLE, y: s[0].y - this.dir.y * SAMPLE });
+        s.push({ px: s[0].px - this.dir.x * SAMPLE * view.cell, py: s[0].py - this.dir.y * SAMPLE * view.cell });
       }
-      let pts = s.map(p => ({ px: view.cx(p.x), py: view.cy(p.y) }));
+      let pts = s;
       if (pts.length > 150) {
         const k = Math.ceil(pts.length / 150);
         const thinned = [];
@@ -350,7 +360,8 @@ class Snake {
     for (let si = 0; si < sp.all.length; si++) {
       const pts = sp.all[si];
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const p of pts) {
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
         if (p.px < minX) minX = p.px;
         if (p.px > maxX) maxX = p.px;
         if (p.py < minY) minY = p.py;
@@ -358,13 +369,23 @@ class Snake {
       }
       const xs = visOffsets(minX, maxX, view.w);
       const ys = visOffsets(minY, maxY, view.h);
-      for (const ox of xs) {
-        for (const oy of ys) {
-          ctx.save();
-          ctx.translate(ox, oy);
-          drawBody(ctx, pts, cell, this.skin, { alpha, time });
-          ctx.restore();
-          if (si === 0) headCopies.push([ox, oy]);
+      if (xs.length === 1 && xs[0] === 0 && ys.length === 1 && ys[0] === 0) {
+        drawBody(ctx, pts, cell, this.skin, { alpha, time });
+        if (si === 0) headCopies.push([0, 0]);
+      } else {
+        for (let xi = 0; xi < xs.length; xi++) {
+          const ox = xs[xi];
+          for (let yi = 0; yi < ys.length; yi++) {
+            const oy = ys[yi];
+            if (ox === 0 && oy === 0) {
+              drawBody(ctx, pts, cell, this.skin, { alpha, time });
+            } else {
+              ctx.translate(ox, oy);
+              drawBody(ctx, pts, cell, this.skin, { alpha, time });
+              ctx.translate(-ox, -oy);
+            }
+            if (si === 0) headCopies.push([ox, oy]);
+          }
         }
       }
     }
@@ -386,7 +407,32 @@ class Snake {
       blinkK = clamp(k, 0.08, 1);
     }
     const tongueK = this.tongueAnim >= 0 ? Math.sin(Math.PI * this.tongueAnim / 340) : 0;
-    for (const [ox, oy] of headCopies) {
+
+    // Precalculate aura parameters once outside headCopies loop
+    let magnetAlpha = 0, magnetR = 0, magnetW = 0;
+    if (state.magnet) {
+      magnetAlpha = baseA * (0.3 + 0.18 * Math.sin(time * 0.008));
+      magnetR = cell * (1.02 + 0.09 * Math.sin(time * 0.006));
+      magnetW = cell * 0.09;
+    }
+
+    let comboAlpha1 = 0, comboR1 = 0, comboW = 0, comboStroke = '', comboAlpha2 = 0, comboR2 = 0;
+    const hasCombo = state.combo >= 2;
+    if (hasCombo) {
+      const ck = clamp((state.combo - 1) / (COMBO_MAX - 1), 0, 1);
+      const pulse = 0.5 + 0.5 * Math.sin(time * (0.006 + ck * 0.008));
+      comboAlpha1 = baseA * (0.16 + ck * 0.3) * (0.65 + 0.35 * pulse);
+      comboStroke = state.combo >= 4 ? '#ff69b4' : '#ffd54a';
+      comboW = cell * (0.07 + ck * 0.06);
+      comboR1 = cell * (0.86 + 0.12 * pulse + ck * 0.14);
+      if (ck >= 1) {
+        comboAlpha2 = baseA * (0.2 + 0.2 * pulse);
+        comboR2 = cell * (1.24 + 0.1 * pulse);
+      }
+    }
+
+    for (let ci = 0; ci < headCopies.length; ci++) {
+      const [ox, oy] = headCopies[ci];
       ctx.save();
       ctx.translate(ox, oy);
       drawHead(ctx, hx, hy, ang, headR, this.skin, {
@@ -398,33 +444,26 @@ class Snake {
         stretch: this.impulse
       });
       if (state.magnet) {
-        ctx.save();
-        ctx.globalAlpha = baseA * (0.3 + 0.18 * Math.sin(time * 0.008));
+        ctx.globalAlpha = magnetAlpha;
         ctx.strokeStyle = '#69b7ff';
-        ctx.lineWidth = cell * 0.09;
+        ctx.lineWidth = magnetW;
         ctx.beginPath();
-        ctx.arc(hx, hy, cell * (1.02 + 0.09 * Math.sin(time * 0.006)), 0, TAU);
+        ctx.arc(hx, hy, magnetR, 0, TAU);
         ctx.stroke();
-        ctx.restore();
       }
-      if (state.combo >= 2) {
-        // Combo heat aura: ring intensity scales with the multiplier
-        const ck = clamp((state.combo - 1) / (COMBO_MAX - 1), 0, 1);
-        const pulse = 0.5 + 0.5 * Math.sin(time * (0.006 + ck * 0.008));
-        ctx.save();
-        ctx.globalAlpha = baseA * (0.16 + ck * 0.3) * (0.65 + 0.35 * pulse);
-        ctx.strokeStyle = state.combo >= 4 ? '#ff69b4' : '#ffd54a';
-        ctx.lineWidth = cell * (0.07 + ck * 0.06);
+      if (hasCombo) {
+        ctx.globalAlpha = comboAlpha1;
+        ctx.strokeStyle = comboStroke;
+        ctx.lineWidth = comboW;
         ctx.beginPath();
-        ctx.arc(hx, hy, cell * (0.86 + 0.12 * pulse + ck * 0.14), 0, TAU);
+        ctx.arc(hx, hy, comboR1, 0, TAU);
         ctx.stroke();
-        if (ck >= 1) {
-          ctx.globalAlpha = baseA * (0.2 + 0.2 * pulse);
+        if (comboAlpha2 > 0) {
+          ctx.globalAlpha = comboAlpha2;
           ctx.beginPath();
-          ctx.arc(hx, hy, cell * (1.24 + 0.1 * pulse), 0, TAU);
+          ctx.arc(hx, hy, comboR2, 0, TAU);
           ctx.stroke();
         }
-        ctx.restore();
       }
       ctx.restore();
     }

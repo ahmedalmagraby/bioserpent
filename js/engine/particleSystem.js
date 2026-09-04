@@ -33,6 +33,7 @@ class Particles {
     this.popups = [];
     this._pool = [];   // recycled particle objects
     this._batches = new Map();
+    this._activeBatches = [];
     this.shakeMag = 0;
     this.shakeX = 0;
     this.shakeY = 0;
@@ -45,7 +46,11 @@ class Particles {
   clear() {
     this.list.length = 0;
     this.popups.length = 0;
-    for (const arr of this._batches.values()) arr.length = 0;
+    for (let i = 0; i < this._activeBatches.length; i++) {
+      const b = this._batches.get(this._activeBatches[i]);
+      if (b) b.length = 0;
+    }
+    this._activeBatches.length = 0;
     this.shakeMag = 0;
     this.shakeX = 0;
     this.shakeY = 0;
@@ -211,9 +216,11 @@ class Particles {
   }
 
   render(ctx) {
-    for (const arr of this._batches.values()) {
-      arr.length = 0;
+    for (let i = 0; i < this._activeBatches.length; i++) {
+      const b = this._batches.get(this._activeBatches[i]);
+      if (b) b.length = 0;
     }
+    this._activeBatches.length = 0;
 
     // Pass 1: Draw leaves, bubbles, glow sprites, and bucket dots/sparks by color
     for (let i = 0; i < this.list.length; i++) {
@@ -248,18 +255,23 @@ class Particles {
           b = [];
           this._batches.set(p.color, b);
         }
+        if (b.length === 0) {
+          this._activeBatches.push(p.color);
+        }
         b.push(p);
       }
     }
 
     // Pass 2: Batch same-color dot/spark draws into a single path per color
     ctx.globalAlpha = 1;
-    for (const [color, arr] of this._batches) {
-      if (arr.length === 0) continue;
+    for (let i = 0; i < this._activeBatches.length; i++) {
+      const color = this._activeBatches[i];
+      const arr = this._batches.get(color);
+      if (!arr || arr.length === 0) continue;
       ctx.fillStyle = color;
       ctx.beginPath();
-      for (let i = 0; i < arr.length; i++) {
-        const p = arr[i];
+      for (let j = 0; j < arr.length; j++) {
+        const p = arr[j];
         const a = clamp01(p.life / p.maxLife);
         const r = p.size * a;
         if (r > 0.05) {

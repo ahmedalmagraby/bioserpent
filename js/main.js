@@ -8,6 +8,7 @@ const { View, COLS, ROWS, BASE_ROWS, clamp, rand, randi, TAU, mulberry32, GameLo
 const liveRows = () => (view ? view.rows : BASE_ROWS);
 
 const SAVE_KEY = 'bioSerpentSave_v1';
+let _demoBlocked = null, _demoPrev = null, _demoSeen = null, _demoQueue = null, _demoFloodSeen = null, _demoFloodQueue = null;
 
 function defaultSave() {
   return {
@@ -232,31 +233,46 @@ class Game {
   demoPickDir(s, apple) {
     const R = liveRows();
     const W = COLS;
-    const idx = (x, y) => y * W + x;
-    const blocked = new Uint8Array(W * R);
-    for (let i = 0; i < s.cells.length - 1; i++) { // tail cell vacates each step
-      blocked[idx(s.cells[i].x, s.cells[i].y)] = 1;
+    const size = W * R;
+    if (!_demoBlocked || _demoBlocked.length < size) {
+      _demoBlocked = new Uint8Array(size);
+      _demoPrev = new Int16Array(size);
+      _demoSeen = new Uint8Array(size);
+      _demoQueue = new Int32Array(size);
+      _demoFloodSeen = new Uint8Array(size);
+      _demoFloodQueue = new Int32Array(size);
     }
-    const start = idx(s.head.x, s.head.y);
-    const target = apple ? idx(apple.gx, apple.gy) : -1;
-    const prev = new Int16Array(W * R).fill(-1);
-    const seen = new Uint8Array(W * R);
+    const blocked = _demoBlocked;
+    blocked.fill(0, 0, size);
+    for (let i = 0; i < s.cells.length - 1; i++) { // tail cell vacates each step
+      blocked[s.cells[i].y * W + s.cells[i].x] = 1;
+    }
+    const start = s.head.y * W + s.head.x;
+    const target = apple ? apple.gy * W + apple.gx : -1;
+    const prev = _demoPrev;
+    prev.fill(-1, 0, size);
+    const seen = _demoSeen;
+    seen.fill(0, 0, size);
     seen[start] = 1;
-    const q = [start];
+
+    const q = _demoQueue;
+    let qHead = 0;
+    let qTail = 0;
+    q[qTail++] = start;
     let found = false;
-    while (q.length) {
-      const cur = q.shift();
+    while (qHead < qTail) {
+      const cur = q[qHead++];
       if (cur === target) { found = true; break; }
       const cx2 = cur % W;
       const cy2 = Math.floor(cur / W);
       for (const d of DIR_VALUES) {
         const nx = (cx2 + d.x + W) % W;
         const ny = (cy2 + d.y + R) % R;
-        const ni = idx(nx, ny);
+        const ni = ny * W + nx;
         if (seen[ni] || blocked[ni]) continue;
         seen[ni] = 1;
         prev[ni] = cur;
-        q.push(ni);
+        q[qTail++] = ni;
       }
     }
     if (!found) return null;
@@ -269,28 +285,42 @@ class Game {
     for (const d of DIR_VALUES) {
       if ((s.head.x + d.x + W) % W === sx && (s.head.y + d.y + R) % R === sy) {
         // Safety: don't take a path into a region smaller than our body length
-        if (this.floodFillSize(sx, sy, blocked, W, R) < s.cells.length) return null;
+        if (this.floodFillSize(sx, sy, blocked, W, R, s.cells.length) < s.cells.length) return null;
         return d;
       }
     }
     return null;
   }
 
-  floodFillSize(x0, y0, blocked, W, R) {
-    if (blocked[y0 * W + x0]) return 0;
-    const seen = new Set([y0 * W + x0]);
-    const q = [[x0, y0]];
+  floodFillSize(x0, y0, blocked, W, R, limit = Infinity) {
+    const startIdx = y0 * W + x0;
+    if (blocked[startIdx]) return 0;
+    const size = W * R;
+    if (!_demoFloodSeen || _demoFloodSeen.length < size) {
+      _demoFloodSeen = new Uint8Array(size);
+      _demoFloodQueue = new Int32Array(size);
+    }
+    const seen = _demoFloodSeen;
+    seen.fill(0, 0, size);
+    seen[startIdx] = 1;
+    const q = _demoFloodQueue;
+    let qHead = 0;
+    let qTail = 0;
+    q[qTail++] = startIdx;
     let n = 0;
-    while (q.length) {
-      const [cx, cy] = q.pop();
+    while (qHead < qTail) {
+      const cur = q[qHead++];
       n++;
+      if (n >= limit) return n;
+      const cx = cur % W;
+      const cy = Math.floor(cur / W);
       for (const d of DIR_VALUES) {
         const nx = (cx + d.x + W) % W;
         const ny = (cy + d.y + R) % R;
         const ni = ny * W + nx;
-        if (!seen.has(ni) && !blocked[ni]) {
-          seen.add(ni);
-          q.push([nx, ny]);
+        if (!seen[ni] && !blocked[ni]) {
+          seen[ni] = 1;
+          q[qTail++] = ni;
         }
       }
     }
