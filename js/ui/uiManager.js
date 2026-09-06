@@ -66,6 +66,14 @@ class UIManager {
       saveModalTitle: this.$('saveModalTitle'),
       saveModalSub: this.$('saveModalSub')
     };
+    if (this.el.combo) {
+      this.el.combo.classList.remove('hidden');
+      this.el.combo.classList.add('vis-hidden');
+    }
+    if (this.el.hudBar) {
+      this.el.hudBar.classList.remove('hidden');
+      this.el.hudBar.classList.add('vis-hidden');
+    }
     this._statsHtml = '';
     this._focusStack = [];
     this._prevFocus = null;
@@ -406,7 +414,7 @@ class UIManager {
           this.el.combo.classList.add('pulse');
         }
       } else {
-        this.el.combo.classList.remove('pulse', 'pulse-alt');
+        this.el.combo.classList.remove('pulse', 'pulse-alt', 'hidden');
         this.el.combo.classList.add('vis-hidden');
       }
     }
@@ -420,6 +428,7 @@ class UIManager {
           fill.style.background = d.bar.color || 'var(--accent)';
         }
       } else {
+        bar.classList.remove('hidden');
         bar.classList.add('vis-hidden');
       }
     }
