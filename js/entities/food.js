@@ -536,10 +536,11 @@ class FoodManager {
 
   render(ctx, view, time) {
     const cell = view.cell;
+    const foodScale = cell < 18 ? Math.min(1.35, 18 / cell) : 1;
     for (const it of this.items) {
       const ox = (it.ox || 0) * cell;
       const oy = (it.oy || 0) * cell;
-      const bob = Math.sin(time * 0.003 + it.gx * 2) * cell * 0.04 + it.hop * cell * 0.18;
+      const bob = Math.sin(time * 0.003 + it.gx * 2) * (cell * 0.04 * foodScale + (foodScale > 1 ? 0.6 : 0)) + it.hop * cell * 0.18;
       const x = view.cx(it.gx) + ox;
       const y = view.cy(it.gy) + oy - bob;
       const pop = it.pop === undefined ? 1 : 0.3 + 0.7 * easeOutCubic(Math.min(1, it.pop));
@@ -551,46 +552,55 @@ class FoodManager {
       }
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
-      ctx.ellipse(view.cx(it.gx) + ox, view.cy(it.gy) + oy + cell * 0.3, cell * 0.24, cell * 0.07, 0, 0, TAU);
+      ctx.ellipse(view.cx(it.gx) + ox, view.cy(it.gy) + oy + cell * 0.3, cell * 0.24 * foodScale, cell * 0.07 * foodScale, 0, 0, TAU);
       ctx.fill();
       if (it.type === 'apple') {
-        let g = _gradCache.get(`apple_${cell}`);
+        const rApple = Math.min(cell * 0.44, cell * 0.32 * foodScale);
+        // Soft ambient aura for high peripheral visibility on mobile
+        const gr = Math.min(cell * 0.85, rApple * 2.2);
+        const asp = BS.glowSprite && BS.glowSprite('rgba(255, 75, 75, 0.38)');
+        if (asp) {
+          ctx.drawImage(asp, x - gr, y - gr, gr * 2, gr * 2);
+        }
+        let g = _gradCache.get(`apple_${cell}_${Math.round(foodScale * 10)}`);
         if (!g) {
-          g = ctx.createRadialGradient(-cell * 0.1, -cell * 0.12, 1, 0, 0, cell * 0.36);
+          g = ctx.createRadialGradient(-rApple * 0.31, -rApple * 0.375, 1, 0, 0, rApple * 1.125);
           g.addColorStop(0, '#ff8a80');
           g.addColorStop(0.5, '#e53935');
           g.addColorStop(1, '#c62828');
-          _gradCache.set(`apple_${cell}`, g);
+          _gradCache.set(`apple_${cell}_${Math.round(foodScale * 10)}`, g);
         }
         ctx.translate(x, y);
         ctx.fillStyle = '#c62828';
         ctx.strokeStyle = '#7f1616';
-        ctx.lineWidth = cell * 0.04;
+        ctx.lineWidth = Math.max(1.2, cell * 0.04 * foodScale);
         ctx.beginPath();
-        ctx.arc(0, 0, cell * 0.32, 0, TAU);
+        ctx.arc(0, 0, rApple, 0, TAU);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(0, 0, cell * 0.32, 0, TAU);
+        ctx.arc(0, 0, rApple, 0, TAU);
         ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.globalAlpha = 0.55;
         ctx.beginPath();
-        ctx.ellipse(-cell * 0.11, -cell * 0.12, cell * 0.07, cell * 0.045, -0.6, 0, TAU);
+        ctx.ellipse(-rApple * 0.34, -rApple * 0.375, rApple * 0.22, rApple * 0.14, -0.6, 0, TAU);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.strokeStyle = '#6d4c41';
-        ctx.lineWidth = cell * 0.05;
+        ctx.lineWidth = Math.max(1.2, cell * 0.05 * foodScale);
         ctx.beginPath();
-        ctx.moveTo(0, -cell * 0.28);
-        ctx.quadraticCurveTo(cell * 0.03, -cell * 0.42, cell * 0.08, -cell * 0.46);
+        ctx.moveTo(0, -rApple * 0.88);
+        ctx.quadraticCurveTo(rApple * 0.1, -rApple * 1.3, rApple * 0.25, -rApple * 1.44);
         ctx.stroke();
         ctx.fillStyle = '#43a047';
         ctx.beginPath();
-        ctx.ellipse(cell * 0.17, -cell * 0.42, cell * 0.13, cell * 0.06, -0.5, 0, TAU);
+        ctx.ellipse(rApple * 0.53, -rApple * 1.3, rApple * 0.4, rApple * 0.19, -0.5, 0, TAU);
         ctx.fill();
       } else if (it.type === 'egg') {
+        const rEggX = Math.min(cell * 0.44, cell * 0.26 * foodScale);
+        const rEggY = Math.min(cell * 0.48, cell * 0.33 * foodScale);
         // Serpent Egg: cream shell, speckles, wobble intensifies near hatching
         const urgency = 1 - it.life / (it.maxLife || 1);
         const wob = Math.sin(time * (0.008 + urgency * 0.02) + it.wob) * (0.08 + urgency * 0.22);
@@ -598,40 +608,41 @@ class FoodManager {
         ctx.rotate(wob);
         ctx.fillStyle = 'rgba(0,0,0,0.22)';
         ctx.beginPath();
-        ctx.ellipse(0, cell * 0.3, cell * 0.22, cell * 0.06, 0, 0, TAU);
+        ctx.ellipse(0, cell * 0.3, cell * 0.22 * foodScale, cell * 0.06 * foodScale, 0, 0, TAU);
         ctx.fill();
-        let g = _gradCache.get(`egg_${cell}`);
+        let g = _gradCache.get(`egg_${cell}_${Math.round(foodScale * 10)}`);
         if (!g) {
-          g = ctx.createRadialGradient(-cell * 0.07, -cell * 0.09, 1, 0, 0, cell * 0.34);
+          g = ctx.createRadialGradient(-rEggX * 0.27, -rEggY * 0.27, 1, 0, 0, rEggY * 1.03);
           g.addColorStop(0, '#fffdf4');
           g.addColorStop(0.7, '#f2e9cf');
           g.addColorStop(1, '#d9cba8');
-          _gradCache.set(`egg_${cell}`, g);
+          _gradCache.set(`egg_${cell}_${Math.round(foodScale * 10)}`, g);
         }
         ctx.fillStyle = g;
         ctx.strokeStyle = '#a89a72';
-        ctx.lineWidth = cell * 0.04;
+        ctx.lineWidth = Math.max(1.2, cell * 0.04 * foodScale);
         ctx.beginPath();
-        ctx.ellipse(0, 0, cell * 0.26, cell * 0.33, 0, 0, TAU);
+        ctx.ellipse(0, 0, rEggX, rEggY, 0, 0, TAU);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = 'rgba(140,120,80,0.55)';
         for (const [sx, sy, sr] of [[-0.08, -0.12, 0.03], [0.09, -0.04, 0.025], [-0.05, 0.08, 0.028], [0.06, 0.14, 0.02]]) {
           ctx.beginPath();
-          ctx.arc(sx * cell, sy * cell, sr * cell, 0, TAU);
+          ctx.arc(sx * cell * foodScale, sy * cell * foodScale, Math.max(0.8, sr * cell * foodScale), 0, TAU);
           ctx.fill();
         }
         if (urgency > 0.65) {
           // Cracks appear as hatching nears
           ctx.strokeStyle = '#8c7c52';
-          ctx.lineWidth = cell * 0.03;
+          ctx.lineWidth = Math.max(1.1, cell * 0.03 * foodScale);
           ctx.beginPath();
-          ctx.moveTo(-cell * 0.16, -cell * 0.05);
-          ctx.lineTo(-cell * 0.05, 0);
-          ctx.lineTo(-cell * 0.12, cell * 0.08);
+          ctx.moveTo(-rEggX * 0.61, -rEggY * 0.15);
+          ctx.lineTo(-rEggX * 0.19, 0);
+          ctx.lineTo(-rEggX * 0.46, rEggY * 0.24);
           ctx.stroke();
         }
       } else {
+        const rGold = Math.min(cell * 0.44, cell * 0.26 * foodScale);
         const pulse = 0.85 + 0.15 * Math.sin(time * 0.007 + it.gx);
         const blink = it.life < 2600 ? (Math.sin(time * 0.025) > -0.3 ? 1 : 0.25) : 1;
         ctx.globalAlpha = blink;
@@ -650,27 +661,27 @@ class FoodManager {
         }
         const frac = Math.max(0, it.life / (it.maxLife || CONFIG.goldenLifeMs));
         ctx.strokeStyle = frac < 0.35 ? '#ff6b6b' : '#ffd54a';
-        ctx.lineWidth = cell * 0.06;
+        ctx.lineWidth = Math.max(1.5, cell * 0.06 * foodScale);
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.arc(x, y, cell * 0.46, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
+        ctx.arc(x, y, Math.min(cell * 0.48, cell * 0.46 * foodScale), -Math.PI / 2, -Math.PI / 2 + frac * TAU);
         ctx.stroke();
         ctx.fillStyle = '#ffca28';
         ctx.strokeStyle = '#b8860b';
-        ctx.lineWidth = cell * 0.035;
+        ctx.lineWidth = Math.max(1.2, cell * 0.035 * foodScale);
         ctx.beginPath();
-        ctx.arc(x, y, cell * 0.26, 0, TAU);
+        ctx.arc(x, y, rGold, 0, TAU);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = '#fff59d';
         ctx.beginPath();
-        ctx.arc(x - cell * 0.08, y - cell * 0.09, cell * 0.08, 0, TAU);
+        ctx.arc(x - rGold * 0.31, y - rGold * 0.35, Math.max(1.0, rGold * 0.31), 0, TAU);
         ctx.fill();
         for (let k = 0; k < 3; k++) {
           const a = time * 0.004 + k * (TAU / 3);
           ctx.fillStyle = '#fffde7';
           ctx.beginPath();
-          ctx.arc(x + Math.cos(a) * cell * 0.42, y + Math.sin(a) * cell * 0.42, cell * 0.045, 0, TAU);
+          ctx.arc(x + Math.cos(a) * cell * 0.42 * foodScale, y + Math.sin(a) * cell * 0.42 * foodScale, Math.max(1.0, cell * 0.045 * foodScale), 0, TAU);
           ctx.fill();
         }
       }
@@ -686,34 +697,34 @@ class FoodManager {
       if (pop < 1) ctx.scale(pop, pop);
       if (n.kind === 'firefly') {
         const glow = 0.7 + 0.3 * Math.sin(time * 0.01 + n.wing);
-        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, cell * 0.8);
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, cell * 0.8 * foodScale);
         g.addColorStop(0, `rgba(212,255,120,${0.5 * glow})`);
         g.addColorStop(1, 'rgba(212,255,120,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(0, 0, cell * 0.8, 0, TAU);
+        ctx.arc(0, 0, cell * 0.8 * foodScale, 0, TAU);
         ctx.fill();
         const flap = Math.sin(n.wing) * 0.7;
         ctx.fillStyle = 'rgba(220,240,255,0.75)';
-        for (const s of [-1, 1]) {
-          const rWing = s * (0.9 + flap * s);
+        for (const sWing of [-1, 1]) {
+          const rWing = sWing * (0.9 + flap * sWing);
           ctx.rotate(rWing);
           ctx.beginPath();
-          ctx.ellipse(cell * 0.12, 0, cell * 0.16, cell * 0.06, 0, 0, TAU);
+          ctx.ellipse(cell * 0.12 * foodScale, 0, cell * 0.16 * foodScale, cell * 0.06 * foodScale, 0, 0, TAU);
           ctx.fill();
           ctx.rotate(-rWing);
         }
         ctx.fillStyle = '#33691e';
         ctx.beginPath();
-        ctx.arc(-cell * 0.08, 0, cell * 0.09, 0, TAU);
+        ctx.arc(-cell * 0.08 * foodScale, 0, cell * 0.09 * foodScale, 0, TAU);
         ctx.fill();
         ctx.fillStyle = 'rgba(212,255,120,0.4)';
         ctx.beginPath();
-        ctx.ellipse(cell * 0.08, 0, cell * 0.18, cell * 0.14, 0, 0, TAU);
+        ctx.ellipse(cell * 0.08 * foodScale, 0, cell * 0.18 * foodScale, cell * 0.14 * foodScale, 0, 0, TAU);
         ctx.fill();
         ctx.fillStyle = '#d4ff78';
         ctx.beginPath();
-        ctx.ellipse(cell * 0.08, 0, cell * 0.14, cell * 0.1, 0, 0, TAU);
+        ctx.ellipse(cell * 0.08 * foodScale, 0, cell * 0.14 * foodScale, cell * 0.1 * foodScale, 0, 0, TAU);
         ctx.fill();
       } else if (n.kind === 'dragonfly') {
         const ang = Math.atan2(n.ty - n.fy, n.tx - n.fx);
@@ -722,94 +733,94 @@ class FoodManager {
         // 4 wings (2 on each side)
         ctx.fillStyle = 'rgba(140, 230, 255, 0.6)';
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.lineWidth = cell * 0.02;
-        for (const s of [-1, 1]) {
+        ctx.lineWidth = Math.max(1.0, cell * 0.02 * foodScale);
+        for (const sWing of [-1, 1]) {
           // Front wing
-          const rFront = s * (1.1 + flap * s);
+          const rFront = sWing * (1.1 + flap * sWing);
           ctx.rotate(rFront);
           ctx.beginPath();
-          ctx.ellipse(0, s * cell * 0.22, cell * 0.07, cell * 0.26, s * 0.2, 0, TAU);
+          ctx.ellipse(0, sWing * cell * 0.22 * foodScale, cell * 0.07 * foodScale, cell * 0.26 * foodScale, sWing * 0.2, 0, TAU);
           ctx.fill();
           ctx.stroke();
           ctx.rotate(-rFront);
           // Back wing
-          const rBack = s * (1.5 - flap * s * 0.8);
+          const rBack = sWing * (1.5 - flap * sWing * 0.8);
           ctx.rotate(rBack);
           ctx.beginPath();
-          ctx.ellipse(-cell * 0.06, s * cell * 0.18, cell * 0.06, cell * 0.22, -s * 0.2, 0, TAU);
+          ctx.ellipse(-cell * 0.06 * foodScale, sWing * cell * 0.18 * foodScale, cell * 0.06 * foodScale, cell * 0.22 * foodScale, -sWing * 0.2, 0, TAU);
           ctx.fill();
           ctx.stroke();
           ctx.rotate(-rBack);
         }
         // Long slender iridescent body
-        let grad = _gradCache.get(`dragonfly_${cell}`);
+        let grad = _gradCache.get(`dragonfly_${cell}_${Math.round(foodScale * 10)}`);
         if (!grad) {
-          grad = ctx.createLinearGradient(-cell * 0.3, 0, cell * 0.25, 0);
+          grad = ctx.createLinearGradient(-cell * 0.3 * foodScale, 0, cell * 0.25 * foodScale, 0);
           grad.addColorStop(0, '#00b4d8');
           grad.addColorStop(0.5, '#48cae4');
           grad.addColorStop(1, '#90e0ef');
-          _gradCache.set(`dragonfly_${cell}`, grad);
+          _gradCache.set(`dragonfly_${cell}_${Math.round(foodScale * 10)}`, grad);
         }
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.ellipse(-cell * 0.08, 0, cell * 0.28, cell * 0.05, 0, 0, TAU);
+        ctx.ellipse(-cell * 0.08 * foodScale, 0, cell * 0.28 * foodScale, cell * 0.05 * foodScale, 0, 0, TAU);
         ctx.fill();
         // Thorax & Head
         ctx.fillStyle = '#023e8a';
         ctx.beginPath();
-        ctx.arc(cell * 0.14, 0, cell * 0.07, 0, TAU);
+        ctx.arc(cell * 0.14 * foodScale, 0, cell * 0.07 * foodScale, 0, TAU);
         ctx.fill();
         // Compound big glowing eyes
         ctx.fillStyle = '#00f5d4';
-        for (const s of [-1, 1]) {
+        for (const sEye of [-1, 1]) {
           ctx.beginPath();
-          ctx.arc(cell * 0.18, s * cell * 0.05, cell * 0.04, 0, TAU);
+          ctx.arc(cell * 0.18 * foodScale, sEye * cell * 0.05 * foodScale, Math.max(1.2, cell * 0.04 * foodScale), 0, TAU);
           ctx.fill();
         }
       } else {
         const ang = Math.atan2(n.ty - n.fy, n.tx - n.fx);
         if (!(n.tx === n.fx && n.ty === n.fy)) ctx.rotate(ang);
         ctx.strokeStyle = '#3e2723';
-        ctx.lineWidth = cell * 0.03;
+        ctx.lineWidth = Math.max(1.1, cell * 0.03 * foodScale);
         for (let l = 0; l < 3; l++) {
-          const lx = -cell * 0.1 + l * cell * 0.12;
-          const sw = Math.sin(n.wing * 3 + l * 2) * cell * 0.05;
+          const lx = (-cell * 0.1 + l * cell * 0.12) * foodScale;
+          const sw = Math.sin(n.wing * 3 + l * 2) * cell * 0.05 * foodScale;
           ctx.beginPath();
-          ctx.moveTo(lx, -cell * 0.08);
-          ctx.lineTo(lx - cell * 0.06, -cell * 0.18 + sw);
-          ctx.moveTo(lx, cell * 0.08);
-          ctx.lineTo(lx - cell * 0.06, cell * 0.18 - sw);
+          ctx.moveTo(lx, -cell * 0.08 * foodScale);
+          ctx.lineTo(lx - cell * 0.06 * foodScale, -cell * 0.18 * foodScale + sw);
+          ctx.moveTo(lx, cell * 0.08 * foodScale);
+          ctx.lineTo(lx - cell * 0.06 * foodScale, cell * 0.18 * foodScale - sw);
           ctx.stroke();
         }
         ctx.fillStyle = '#4e342e';
         ctx.strokeStyle = '#2a1815';
-        ctx.lineWidth = cell * 0.03;
+        ctx.lineWidth = Math.max(1.1, cell * 0.03 * foodScale);
         ctx.beginPath();
-        ctx.ellipse(0, 0, cell * 0.24, cell * 0.17, 0, 0, TAU);
+        ctx.ellipse(0, 0, cell * 0.24 * foodScale, cell * 0.17 * foodScale, 0, 0, TAU);
         ctx.fill();
         ctx.stroke();
         ctx.strokeStyle = '#8d6e63';
-        ctx.lineWidth = cell * 0.025;
+        ctx.lineWidth = Math.max(1.0, cell * 0.025 * foodScale);
         ctx.beginPath();
-        ctx.moveTo(-cell * 0.16, 0);
-        ctx.lineTo(cell * 0.16, 0);
+        ctx.moveTo(-cell * 0.16 * foodScale, 0);
+        ctx.lineTo(cell * 0.16 * foodScale, 0);
         ctx.stroke();
         ctx.fillStyle = '#d7ccc8';
-        for (const s of [-1, 1]) {
+        for (const sEye of [-1, 1]) {
           ctx.beginPath();
-          ctx.arc(cell * 0.26, s * cell * 0.06, cell * 0.025, 0, TAU);
+          ctx.arc(cell * 0.26 * foodScale, sEye * cell * 0.06 * foodScale, Math.max(1.0, cell * 0.025 * foodScale), 0, TAU);
           ctx.fill();
         }
         ctx.fillStyle = '#3e2723';
         ctx.beginPath();
-        ctx.arc(cell * 0.27, 0, cell * 0.08, 0, TAU);
+        ctx.arc(cell * 0.27 * foodScale, 0, cell * 0.08 * foodScale, 0, TAU);
         ctx.fill();
         ctx.strokeStyle = '#3e2723';
-        ctx.lineWidth = cell * 0.02;
-        for (const s of [-1, 1]) {
+        ctx.lineWidth = Math.max(1.0, cell * 0.02 * foodScale);
+        for (const sAnt of [-1, 1]) {
           ctx.beginPath();
-          ctx.moveTo(cell * 0.32, s * cell * 0.04);
-          ctx.lineTo(cell * 0.44, s * cell * 0.12);
+          ctx.moveTo(cell * 0.32 * foodScale, sAnt * cell * 0.04 * foodScale);
+          ctx.lineTo(cell * 0.44 * foodScale, sAnt * cell * 0.12 * foodScale);
           ctx.stroke();
         }
       }

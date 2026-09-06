@@ -377,7 +377,7 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
 
 /* Reserve room for the on-screen d-pad so it never covers the board */
 body.dpad-open #stage {
-  padding-bottom: calc(3 * var(--dp) + 2 * var(--dp-gap) + 30px);
+  padding-bottom: calc(3 * var(--dp) + 2 * var(--dp-gap) + 14px);
 }
 
 #game {
@@ -1867,7 +1867,7 @@ input[type="range"]::-moz-range-thumb {
 /* Portrait: lift toasts above the d-pad instead of covering it */
 @media (orientation: portrait) {
   body.dpad-open #toasts {
-    bottom: calc(env(safe-area-inset-bottom) + 3 * var(--dp) + 2 * var(--dp-gap) + 26px);
+    bottom: calc(env(safe-area-inset-bottom) + 3 * var(--dp) + 2 * var(--dp-gap) + 18px);
   }
 }
 .toast {
@@ -1894,7 +1894,7 @@ input[type="range"]::-moz-range-thumb {
 .back-btn { margin-top: 6px; }
 
 @media (max-width: 520px) {
-  :root { --dp: 58px; --dp-gap: 9px; }
+  :root { --dp: 52px; --dp-gap: 8px; }
   #hud { padding: 6px 10px 2px; gap: 6px; }
   .hud-score-card { min-width: 62px; padding: 3px 8px; border-radius: 11px; }
   .hud-label { font-size: 8.5px; }

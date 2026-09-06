@@ -93,6 +93,7 @@ class PowerUpManager {
 
   render(ctx, view, time) {
     const cell = view.cell;
+    const s = cell < 18 ? Math.min(1.35, 18 / cell) : 1;
     for (const p of this.field) {
       const meta = POWERUP_META[p.type];
       const x = view.cx(p.gx);
@@ -121,13 +122,14 @@ class PowerUpManager {
       ctx.fill();
       ctx.fillStyle = '#efe6d8';
       ctx.strokeStyle = 'rgba(60,50,40,0.6)';
-      ctx.lineWidth = cell * 0.03;
+      ctx.lineWidth = Math.max(1.0, cell * 0.03 * s);
       ctx.beginPath();
       ctx.roundRect(x - cell * 0.11, y, cell * 0.22, cell * 0.3, cell * 0.08);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = meta.cap;
       ctx.strokeStyle = 'rgba(30,20,30,0.55)';
+      ctx.lineWidth = Math.max(1.2, cell * 0.035 * s);
       ctx.beginPath();
       ctx.ellipse(x, y, cell * 0.36, cell * 0.27, 0, Math.PI, TAU);
       ctx.quadraticCurveTo(x, y + cell * 0.12, x - cell * 0.36, y);
@@ -140,7 +142,7 @@ class PowerUpManager {
         ctx.fill();
       }
       ctx.fillStyle = 'rgba(25,20,35,0.85)';
-      ctx.font = `900 ${cell * 0.26}px "Segoe UI", system-ui, sans-serif`;
+      ctx.font = `900 ${Math.max(8, Math.round(cell * 0.26 * s))}px "Segoe UI", system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(meta.short, x, y - cell * 0.12);
