@@ -84,8 +84,20 @@ const CONFIG = {
   dprMax: 3
 };
 
-const REDUCED_MOTION = typeof matchMedia === 'function'
+let REDUCED_MOTION = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+if (typeof matchMedia === 'function') {
+  try {
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMotion = e => {
+      REDUCED_MOTION = !!e.matches;
+      if (BS) BS.REDUCED_MOTION = REDUCED_MOTION;
+    };
+    if (mq.addEventListener) mq.addEventListener('change', updateMotion);
+    else if (mq.addListener) mq.addListener(updateMotion);
+  } catch (_) {}
+}
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;

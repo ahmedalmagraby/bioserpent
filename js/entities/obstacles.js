@@ -30,7 +30,7 @@ class Obstacles {
   loadFromMap(rows) {
     this.clear();
     const pairs = {};
-    for (let y = 0; y < Math.min(rows.length, BS.view ? BS.view.rows : ROWS); y++) {
+    for (let y = 0; y < rows.length; y++) {
       const row = rows[y];
       for (let x = 0; x < COLS; x++) {
         const ch = row[x] || '.';
@@ -59,7 +59,7 @@ class Obstacles {
     this._ver++;
     // Build the O(1) lookup grid now that all hazard positions are known.
     const boardRows = BS.view ? BS.view.rows : ROWS;
-    this._rebuildGrid(COLS, boardRows);
+    this._rebuildGrid(COLS, Math.max(boardRows, rows.length));
   }
 
   _bakeRocks(view) {
@@ -125,9 +125,9 @@ class Obstacles {
     this._gridCols = cols;
     this._gridRows = rows;
     this._grid = new Uint8Array(cols * rows); // initialised to 0
-    for (const r of this.rocks)    this._grid[r.y * cols + r.x] = 1;
-    for (const b of this.brambles) this._grid[b.y * cols + b.x] = 2;
-    for (const s of this.spores)   this._grid[s.y * cols + s.x] = 3;
+    for (const r of this.rocks)    if (r.y < rows && r.x < cols) this._grid[r.y * cols + r.x] = 1;
+    for (const b of this.brambles) if (b.y < rows && b.x < cols) this._grid[b.y * cols + b.x] = 2;
+    for (const s of this.spores)   if (s.y < rows && s.x < cols) this._grid[s.y * cols + s.x] = 3;
   }
 
   blocked(x, y) {
@@ -244,20 +244,21 @@ class Obstacles {
     for (const p of this.portals) {
       const cx = view.cx(p.x);
       const cy = view.cy(p.y);
-      const dir = p.phase % 2 === 0 ? 1 : -1;
+      const dir = (p.phase || 0) % 2 === 0 ? 1 : -1;
+      const hue = p.hue || (dir === 1 ? { main: '#ff9f43', glow: 'rgba(255,159,67,' } : { main: '#48dbfb', glow: 'rgba(72,219,251,' });
       ctx.save();
       ctx.translate(cx, cy);
       const g = ctx.createRadialGradient(0, 0, 0, 0, 0, cell * 0.75);
-      g.addColorStop(0, p.hue.glow + '0.5)');
-      g.addColorStop(1, p.hue.glow + '0)');
+      g.addColorStop(0, hue.glow + '0.5)');
+      g.addColorStop(1, hue.glow + '0)');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(0, 0, cell * 0.75, 0, TAU);
       ctx.fill();
-      ctx.strokeStyle = p.hue.main;
+      ctx.strokeStyle = hue.main;
       ctx.lineCap = 'round';
       for (let i = 0; i < 3; i++) {
-        const a0 = time * 0.0035 * dir + i * (TAU / 3) + p.phase;
+        const a0 = time * 0.0035 * dir + i * (TAU / 3) + (p.phase || 0);
         ctx.lineWidth = cell * 0.07 - i * cell * 0.015;
         ctx.globalAlpha = 0.55 + i * 0.15;
         ctx.beginPath();
@@ -265,7 +266,7 @@ class Obstacles {
         ctx.stroke();
       }
       ctx.globalAlpha = 0.9;
-      ctx.fillStyle = p.hue.main;
+      ctx.fillStyle = hue.main;
       ctx.beginPath();
       ctx.arc(0, 0, cell * 0.07, 0, TAU);
       ctx.fill();

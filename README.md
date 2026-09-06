@@ -44,10 +44,27 @@
 | **Steer** | Arrow Keys / `W`, `A`, `S`, `D` | Swipe / Floating Joystick / On-screen D-Pad | D-Pad / Left Stick |
 | **Speed Burst** | Hold `Shift` | Hold Burst Button (`⚡`) / Second Finger | Hold `A` / `B` / `RB` / `RT` |
 | **Pause / Resume** | `Space` / `P` / `Escape` | HUD Pause Button (`❚❚`) | `Start` (+) |
-| **Quick Restart** | `R` (on game over / pause) | Restart Button (`↻`) | `A` (on game over) |
+| **Quick Restart** | `R` (on game over / pause / level complete) | Restart Button (`↻`) | `A` (on game over) |
 | **Toggle Mute** | `M` | Settings Modal Toggle | — |
 
 *Gamepad: any standard-layout controller (Xbox, PlayStation, etc.) — plug in and press a button to connect. The first active pad drives the game.*
+
+---
+
+## 🧪 Automated Testing
+
+BioSerpent includes a comprehensive 6-tier automated test harness covering core features, boundary invariants, cross-feature interactions, real-world workloads, adversarial stress tests, and audit remediations:
+
+```bash
+node tests/run-all-tests.js
+```
+
+- **Tier 1**: Core Isolated Features (§R1, §R2, §R4)
+- **Tier 2**: Boundary & Corner Conditions (§R1, §R2)
+- **Tier 3**: Cross-Feature Combinations & Invariants
+- **Tier 4**: Real-World Workload Playthroughs
+- **Tier 5**: Adversarial Coverage Hardening Matrix
+- **Tier 6**: Audit Remediation & Optimization Matrix
 
 ---
 
@@ -79,7 +96,7 @@ Then navigate to `http://localhost:8080` in your web browser.
 
 ### Editing files
 
-There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=20`, matching the service worker's `bioserpent-v20` cache) so browsers pick up the new version.
+There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=31`, matching the service worker's `bioserpent-v31` cache) so browsers pick up the new version.
 
 ---
 

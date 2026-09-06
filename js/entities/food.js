@@ -196,29 +196,120 @@ class FoodManager {
   }
 
 
-  magnetPull(head, canLand) {
+  magnetPull(head, canLand, wrap = false, isBurst = false, particles = null, view = null, onPull = null) {
     this._checkOccSync();
     this._pullTick = (this._pullTick + 1) % 2;
-    if (this._pullTick !== 0) return;
+    const W = COLS;
+    const R = liveRows();
+    let movedAny = false;
 
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];
-      const dx = head.x - it.gx;
-      const dy = head.y - it.gy;
+      let dx = head.x - it.gx;
+      let dy = head.y - it.gy;
+      if (wrap) {
+        if (dx > W / 2) dx -= W;
+        else if (dx < -W / 2) dx += W;
+        if (dy > R / 2) dy -= R;
+        else if (dy < -R / 2) dy += R;
+      }
       const dist = Math.abs(dx) + Math.abs(dy);
       if (dist > 6 || dist === 0) continue;
-      let nx = it.gx;
-      let ny = it.gy;
-      if (Math.abs(dx) >= Math.abs(dy)) nx += Math.sign(dx);
-      else ny += Math.sign(dy);
-      if (canLand(nx, ny) && !this.occupied(nx, ny)) {
-        this._occRemove(it.gx, it.gy);
-        it.gx = nx;
-        it.gy = ny;
-        it.hop = 1;
-        this._occAdd(nx, ny);
-        this._ver++;
+
+      // Adaptive rate: pull every tick if close (dist <= 2) or during speed burst; otherwise every 2 ticks
+      if (!isBurst && dist > 2 && this._pullTick !== 0) continue;
+
+      // Dual-axis pathfinding: try primary (dominant) axis first, then fallback to orthogonal axis
+      const sx = Math.sign(dx);
+      const sy = Math.sign(dy);
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      let stepX = 0;
+      let stepY = 0;
+      let foundStep = false;
+
+      if (absX >= absY && sx !== 0) {
+        let nx = it.gx + sx;
+        let ny = it.gy;
+        if (wrap) nx = (nx + W) % W;
+        if (canLand(nx, ny) && !this.occupied(nx, ny)) {
+          stepX = sx;
+          stepY = 0;
+          foundStep = true;
+        }
+      } else if (absY > absX && sy !== 0) {
+        let nx = it.gx;
+        let ny = it.gy + sy;
+        if (wrap) ny = (ny + R) % R;
+        if (canLand(nx, ny) && !this.occupied(nx, ny)) {
+          stepX = 0;
+          stepY = sy;
+          foundStep = true;
+        }
       }
+
+      // If dominant axis was blocked by obstacle or coil, test orthogonal axis
+      if (!foundStep) {
+        if (absX >= absY && sy !== 0) {
+          let nx = it.gx;
+          let ny = it.gy + sy;
+          if (wrap) ny = (ny + R) % R;
+          if (canLand(nx, ny) && !this.occupied(nx, ny)) {
+            stepX = 0;
+            stepY = sy;
+            foundStep = true;
+          }
+        } else if (absY > absX && sx !== 0) {
+          let nx = it.gx + sx;
+          let ny = it.gy;
+          if (wrap) nx = (nx + W) % W;
+          if (canLand(nx, ny) && !this.occupied(nx, ny)) {
+            stepX = sx;
+            stepY = 0;
+            foundStep = true;
+          }
+        }
+      }
+
+      if (foundStep) {
+        let targetX = it.gx + stepX;
+        let targetY = it.gy + stepY;
+        const wrappedX = wrap ? (targetX + W) % W : targetX;
+        const wrappedY = wrap ? (targetY + R) % R : targetY;
+
+        this._occRemove(it.gx, it.gy);
+        // Visual sub-cell offset smoothing (only when not wrapping across edge seams)
+        const didWrap = wrappedX !== targetX || wrappedY !== targetY;
+        if (!didWrap) {
+          it.ox = (it.ox || 0) - stepX;
+          it.oy = (it.oy || 0) - stepY;
+        } else {
+          it.ox = 0;
+          it.oy = 0;
+        }
+        it.gx = wrappedX;
+        it.gy = wrappedY;
+        it.hop = 1;
+        this._occAdd(wrappedX, wrappedY);
+        this._ver++;
+        movedAny = true;
+
+        if (particles && view) {
+          const px = view.cx(wrappedX) - stepX * view.cell * 0.35;
+          const py = view.cy(wrappedY) - stepY * view.cell * 0.35;
+          particles.burst(px, py, {
+            count: 1,
+            colors: ['#69b7ff', '#bcdcff', '#ffffff'],
+            speed: 0.03, minSpeed: 0.01,
+            size: 1.6, life: 300, type: 'glow'
+          });
+        }
+      }
+    }
+
+    if (movedAny && typeof onPull === 'function') {
+      onPull();
     }
   }
 
@@ -236,6 +327,14 @@ class FoodManager {
       }
       it.age += dt;
       it.hop = Math.max(0, it.hop - dt * 0.004);
+      if (it.ox) {
+        it.ox *= Math.max(0, 1 - dt * 0.016);
+        if (Math.abs(it.ox) < 0.01) it.ox = 0;
+      }
+      if (it.oy) {
+        it.oy *= Math.max(0, 1 - dt * 0.016);
+        if (Math.abs(it.oy) < 0.01) it.oy = 0;
+      }
       if (it.pop !== undefined && it.pop < 1) it.pop = Math.min(1, it.pop + dt / 220);
       if (it.type === 'golden') {
         it.life -= dt;
@@ -256,8 +355,10 @@ class FoodManager {
           // Hatch into a golden berry with a fresh timer
           const px = it.gx;
           const py = it.gy;
+          this._occRemove(px, py);
           this.items.splice(i, 1);
           this.items.push({ type: 'golden', gx: px, gy: py, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
+          this._occAdd(px, py);
           itemsChanged = true;
           if (env.particles) {
             env.particles.burst(env.view.cx(px), env.view.cy(py), {
@@ -270,6 +371,17 @@ class FoodManager {
     if (itemsChanged) {
       this._itemCount = this.items.length;
       this._ver++;
+    }
+    for (let i = this.insects.length - 1; i >= 0; i--) {
+      const n = this.insects[i];
+      if (n.fy >= R || n.fx >= COLS || n.fy < 0 || n.fx < 0 ||
+          n.ty >= R || n.tx >= COLS || n.ty < 0 || n.tx < 0) {
+        this._occRemove(n.fx, n.fy);
+        if (n.tx !== n.fx || n.ty !== n.fy) this._occRemove(n.tx, n.ty);
+        this.insects.splice(i, 1);
+        this._insectCount = this.insects.length;
+        this._ver++;
+      }
     }
     for (const n of this.insects) {
       n.age += dt;
@@ -295,8 +407,12 @@ class FoodManager {
       const cands = [];
       const dirPool = n.kind === 'dragonfly' ? DIR8 : CARDINALS;
       if (Math.random() < (fleeing ? 0.9 : n.kind === 'dragonfly' ? 0.75 : n.kind === 'beetle' ? 0.65 : 0.3)) cands.push(n.dir);
-      // Safely add remaining directions without infinite while loops
-      const shuffled = [...dirPool].sort(() => Math.random() - 0.5);
+      // Uniform Fisher-Yates shuffle for directions
+      const shuffled = dirPool.slice();
+      for (let j = shuffled.length - 1; j > 0; j--) {
+        const k = Math.floor(Math.random() * (j + 1));
+        const tmp = shuffled[j]; shuffled[j] = shuffled[k]; shuffled[k] = tmp;
+      }
       for (const d of shuffled) {
         if (!cands.some(t => t.x === d.x && t.y === d.y)) cands.push(d);
       }
@@ -389,8 +505,10 @@ class FoodManager {
     let bd2 = Infinity;
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];
-      const x = (it.gx + 0.5) * cell;
-      const y = (it.gy + 0.5) * cell;
+      const ox = (it.ox || 0) * cell;
+      const oy = (it.oy || 0) * cell;
+      const x = (it.gx + 0.5) * cell + ox;
+      const y = (it.gy + 0.5) * cell + oy;
       const dx = x - px;
       const dy = y - py;
       const d2 = dx * dx + dy * dy;
@@ -419,19 +537,21 @@ class FoodManager {
   render(ctx, view, time) {
     const cell = view.cell;
     for (const it of this.items) {
+      const ox = (it.ox || 0) * cell;
+      const oy = (it.oy || 0) * cell;
       const bob = Math.sin(time * 0.003 + it.gx * 2) * cell * 0.04 + it.hop * cell * 0.18;
-      const x = view.cx(it.gx);
-      const y = view.cy(it.gy) - bob;
+      const x = view.cx(it.gx) + ox;
+      const y = view.cy(it.gy) + oy - bob;
       const pop = it.pop === undefined ? 1 : 0.3 + 0.7 * easeOutCubic(Math.min(1, it.pop));
       ctx.save();
       if (pop < 1) {
-        ctx.translate(x, view.cy(it.gy));
+        ctx.translate(x, view.cy(it.gy) + oy);
         ctx.scale(pop, pop);
-        ctx.translate(-x, -view.cy(it.gy));
+        ctx.translate(-x, -(view.cy(it.gy) + oy));
       }
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
-      ctx.ellipse(view.cx(it.gx), view.cy(it.gy) + cell * 0.3, cell * 0.24, cell * 0.07, 0, 0, TAU);
+      ctx.ellipse(view.cx(it.gx) + ox, view.cy(it.gy) + oy + cell * 0.3, cell * 0.24, cell * 0.07, 0, 0, TAU);
       ctx.fill();
       if (it.type === 'apple') {
         let g = _gradCache.get(`apple_${cell}`);

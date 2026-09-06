@@ -1,5 +1,5 @@
 // BioSerpent service worker — offline-first cache for PWA install.
-const CACHE = 'bioserpent-v29';
+const CACHE = 'bioserpent-v31';
 const ASSETS = [
   './',
   './index.html',
@@ -48,7 +48,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, copy));
         }
         return res;
-      }).catch(() => hit);
+      }).catch(() => hit || new Response('', { status: 504, statusText: 'Gateway Timeout' }));
       return hit || fetching;
     })
   );

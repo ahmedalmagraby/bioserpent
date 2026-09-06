@@ -198,6 +198,8 @@ class InputManager {
       e.preventDefault();
       return;
     }
+    const t = e.target;
+    if (t && t.closest && t.closest('input, select, textarea, button, a')) return;
     if (e.code === 'KeyM') {
       if (!e.repeat && this.h.onMute) this.h.onMute();
       return;
@@ -213,8 +215,6 @@ class InputManager {
         return;
       }
     }
-    const t = e.target;
-    if (t && t.closest && t.closest('input, select, textarea, button, a')) return;
     const dir = KEY_DIR[e.code];
     if (dir) {
       if (!e.repeat) this.h.onDir(dir);
@@ -396,6 +396,10 @@ class InputManager {
     };
     container.addEventListener('pointerup', release);
     container.addEventListener('pointercancel', release);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pointerup', release);
+      window.addEventListener('pointercancel', release);
+    }
   }
 }
 

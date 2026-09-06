@@ -32,6 +32,9 @@ class Rival {
     this._blocked = new Uint8Array(0);   // scratch BFS grid
     this._seen = new Uint8Array(0);
     this._prev = new Int16Array(0);
+    this._queue = new Int32Array(0);
+    this._ffSeen = new Uint8Array(0);
+    this._ffQueue = new Int32Array(0);
     this._hazGrid = null;
     this._hazKey = '';
   }
@@ -109,9 +112,11 @@ class Rival {
     if (this._blocked.length !== N) this._blocked = new Uint8Array(N);
     if (this._seen.length !== N) this._seen = new Uint8Array(N);
     if (this._prev.length !== N) this._prev = new Int16Array(N);
+    if (this._queue.length !== N) this._queue = new Int32Array(N);
     const blocked = this._blocked;
     const seen = this._seen;
     const prev = this._prev;
+    const q = this._queue;
     blocked.fill(0);
     seen.fill(0);
     prev.fill(-1);
@@ -134,10 +139,10 @@ class Rival {
     const start = idx(s.head.x, s.head.y);
     const target = env.target ? idx(clamp(env.target.gx, 0, W - 1), clamp(env.target.gy, 0, R - 1)) : -1;
     seen[start] = 1;
-    const q = [start];
-    let qHead = 0;
+    let qHead = 0, qTail = 0;
+    q[qTail++] = start;
     let found = false;
-    while (qHead < q.length) {
+    while (qHead < qTail) {
       const cur = q[qHead++];
       if (cur === target) { found = true; break; }
       const cx2 = cur % W;
@@ -150,7 +155,7 @@ class Rival {
         if (seen[ni] || blocked[ni]) continue;
         seen[ni] = 1;
         prev[ni] = cur;
-        q.push(ni);
+        q[qTail++] = ni;
       }
     }
 
@@ -227,18 +232,22 @@ class Rival {
   floodFillSize(x0, y0, blocked, W, R, wrap) {
     if (x0 < 0 || y0 < 0 || x0 >= W || y0 >= R) return 0;
     if (blocked[y0 * W + x0]) return 0;
-    if (!this._ffSeen || this._ffSeen.length !== W * R) {
-      this._ffSeen = new Uint8Array(W * R);
+    const N = W * R;
+    if (!this._ffSeen || this._ffSeen.length !== N) {
+      this._ffSeen = new Uint8Array(N);
+      this._ffQueue = new Int32Array(N);
     } else {
       this._ffSeen.fill(0);
     }
     const seen = this._ffSeen;
+    const q = this._ffQueue;
     const start = y0 * W + x0;
     seen[start] = 1;
-    const q = [start];
+    let qHead = 0, qTail = 0;
+    q[qTail++] = start;
     let n = 0;
-    while (q.length) {
-      const cur = q.pop();
+    while (qHead < qTail) {
+      const cur = q[qHead++];
       const cx = cur % W, cy = (cur / W) | 0;
       n++;
       for (const d of DIR_VALUES) {
@@ -248,7 +257,7 @@ class Rival {
         const ni = ny * W + nx;
         if (!seen[ni] && !blocked[ni]) {
           seen[ni] = 1;
-          q.push(ni);
+          q[qTail++] = ni;
         }
       }
     }

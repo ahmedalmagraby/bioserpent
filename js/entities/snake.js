@@ -141,6 +141,13 @@ class Snake {
     if (n <= 0) this.occ.delete(k); else this.occ.set(k, n);
   }
 
+  rebuildOcc() {
+    this.occ.clear();
+    for (const c of this.cells) {
+      this._occAdd(c.x, c.y);
+    }
+  }
+
   isOccupied(x, y) {
     return this.occ.has(y * 4096 + x);
   }
@@ -409,11 +416,13 @@ class Snake {
     const tongueK = this.tongueAnim >= 0 ? Math.sin(Math.PI * this.tongueAnim / 340) : 0;
 
     // Precalculate aura parameters once outside headCopies loop
-    let magnetAlpha = 0, magnetR = 0, magnetW = 0;
+    let magnetAlpha = 0, magnetR1 = 0, magnetR2 = 0, magnetW = 0, magnetPhase = 0;
     if (state.magnet) {
-      magnetAlpha = baseA * (0.3 + 0.18 * Math.sin(time * 0.008));
-      magnetR = cell * (1.02 + 0.09 * Math.sin(time * 0.006));
-      magnetW = cell * 0.09;
+      magnetAlpha = baseA * (0.32 + 0.16 * Math.sin(time * 0.008));
+      magnetR1 = cell * (0.95 + 0.08 * Math.sin(time * 0.006));
+      magnetR2 = cell * (1.25 + 0.12 * Math.sin(time * 0.005 + 1));
+      magnetW = cell * 0.08;
+      magnetPhase = time * 0.003;
     }
 
     let comboAlpha1 = 0, comboR1 = 0, comboW = 0, comboStroke = '', comboAlpha2 = 0, comboR2 = 0;
@@ -444,12 +453,23 @@ class Snake {
         stretch: this.impulse
       });
       if (state.magnet) {
-        ctx.globalAlpha = magnetAlpha;
+        ctx.save();
         ctx.strokeStyle = '#69b7ff';
         ctx.lineWidth = magnetW;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = magnetAlpha * 0.85;
         ctx.beginPath();
-        ctx.arc(hx, hy, magnetR, 0, TAU);
+        ctx.arc(hx, hy, magnetR1, 0, TAU);
         ctx.stroke();
+
+        ctx.globalAlpha = magnetAlpha * 0.55;
+        ctx.beginPath();
+        ctx.arc(hx, hy, magnetR2, magnetPhase, magnetPhase + Math.PI * 0.75);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(hx, hy, magnetR2, magnetPhase + Math.PI, magnetPhase + Math.PI * 1.75);
+        ctx.stroke();
+        ctx.restore();
       }
       if (hasCombo) {
         ctx.globalAlpha = comboAlpha1;

@@ -599,7 +599,11 @@ class UIManager {
         if (u.type === 'apples') cur = save.stats.apples || 0;
         else if (u.type === 'classicBest') cur = save.best.classic || 0;
         else if (u.type === 'stars') cur = Object.values(save.stars || {}).reduce((a, c) => a + c, 0);
-        if (u.value > 0) {
+        else if (u.type === 'level') {
+          hintText = `🔒 ${skin.hint}`;
+          progHtml = '';
+        }
+        if (u.type !== 'level' && u.value > 0) {
           const frac = Math.min(1, cur / u.value);
           progHtml = `<div class="prog-track"><div class="prog-fill" style="width:${Math.round(frac * 100)}%"></div></div>`;
           hintText = `🔒 ${cur} / ${u.value} (${skin.hint.replace(/^Score |Eat |Earn /, '')})`;
@@ -679,7 +683,8 @@ class UIManager {
       btnDaily.classList.toggle('new-daily', !extra.daily.playedToday);
     }
     if (extra && extra.badgesCount !== undefined && this.el.dockBadgeCount) {
-      this.el.dockBadgeCount.textContent = `${extra.badgesCount}/11`;
+      const totalBadges = extra.badgesTotal || (typeof BADGES !== 'undefined' ? BADGES.length : 12);
+      this.el.dockBadgeCount.textContent = `${extra.badgesCount}/${totalBadges}`;
     }
     const skin = SKINS.find(s => s.id === currentSkinId) || SKINS[0];
     if (this.el.menuSkinName && skin) {
@@ -703,8 +708,14 @@ class UIManager {
     if (this.el.countdown) this.el.countdown.classList.add('hidden');
   }
 
+  setBurstActive(active) {
+    const btn = document.getElementById('btnBurst');
+    if (btn) btn.classList.toggle('active', !!active);
+  }
+
   gameOver(d) {
-    this.el.overTitle.textContent = d.title;
+    if (!d) return;
+    if (this.el.overTitle) this.el.overTitle.textContent = d.title || 'Game Over';
     if (this.el.overMode) this.el.overMode.textContent = d.modeName || '';
     
     // Performance Rank based on score & mode
@@ -758,15 +769,18 @@ class UIManager {
       </div>` +
       (Array.isArray(d.history) && d.history.length > 1 ? this.historyBars(d.history) : '');
 
-    this.el.overStats.innerHTML = rows;
+    if (this.el.overStats) this.el.overStats.innerHTML = rows;
     this.showScreen('over');
   }
 
   historyBars(history) {
-    const max = Math.max(...history, 1);
-    const bars = history.slice(-10).map((s, i, arr) => {
+    const list = Array.isArray(history) ? history : [];
+    const validScores = list.filter(n => typeof n === 'number' && Number.isFinite(n));
+    const max = Math.max(...validScores, 1);
+    const bars = list.slice(-10).map((s, i, arr) => {
       const isLast = i === arr.length - 1;
-      const h = Math.max(8, Math.round((s / max) * 44));
+      const num = typeof s === 'number' && Number.isFinite(s) ? s : 0;
+      const h = Math.max(8, Math.round((num / max) * 44));
       return `<i style="height:${h}px" class="${isLast ? 'last' : ''}" title="${s}"></i>`;
     }).join('');
     return `<div class="history-box"><small>Recent runs</small><div class="history-bars">${bars}</div></div>`;

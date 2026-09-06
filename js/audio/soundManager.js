@@ -272,6 +272,21 @@ class SoundManager {  constructor() {
     this.noise({ bp: 250, q: 0.8, dur: 0.4, gain: 0.2 });
   }
 
+  deathJingle() {
+    if (!this.ctx || this.volumes.muted) return;
+    [220, 196, 174.6, 164.8].forEach((f, i) => {
+      this.tone({ type: 'triangle', f, dur: 0.28, gain: 0.12, t: this.time + i * 0.08, lp: 1200 });
+    });
+  }
+
+  magnetTick() {
+    if (!this.ctx || this.volumes.muted) return;
+    const now = performance.now ? performance.now() : Date.now();
+    if (now - (this._lastMagTick || 0) < 160) return;
+    this._lastMagTick = now;
+    this.tone({ type: 'sine', f: 880, f2: 1250, dur: 0.07, gain: 0.08, lp: 2400 });
+  }
+
   click() {
     this.noise({ hp: 3000, dur: 0.03, gain: 0.15 });
     this.tone({ type: 'sine', f: 700, f2: 520, dur: 0.06, gain: 0.12 });

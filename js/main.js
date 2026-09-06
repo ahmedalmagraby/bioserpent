@@ -25,6 +25,80 @@ function defaultSave() {
   };
 }
 
+function sanitizeSave(s, d) {
+  if (!s || typeof s !== 'object') return d;
+  const num = (v, fallback = 0) => {
+    const n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
+    return (Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback);
+  };
+  const best = {
+    classic: num(s.best?.classic, d.best.classic),
+    timeattack: num(s.best?.timeattack, d.best.timeattack),
+    zen: num(s.best?.zen, d.best.zen)
+  };
+  const stats = Object.assign({}, d.stats);
+  if (s.stats && typeof s.stats === 'object') {
+    for (const k of Object.keys(d.stats)) {
+      if (k === 'topspeed' || k === 'pacifist') {
+        stats[k] = !!s.stats[k];
+      } else {
+        stats[k] = num(s.stats[k], d.stats[k]);
+      }
+    }
+  }
+  const stars = {};
+  if (s.stars && typeof s.stars === 'object') {
+    for (const [k, v] of Object.entries(s.stars)) {
+      stars[k] = clamp(num(v, 0), 0, 3);
+    }
+  }
+  const levelBest = {};
+  if (s.levelBest && typeof s.levelBest === 'object') {
+    for (const [k, v] of Object.entries(s.levelBest)) {
+      levelBest[k] = num(v, 0);
+    }
+  }
+  const daily = {
+    key: typeof s.daily?.key === 'string' ? s.daily.key : d.daily.key,
+    best: num(s.daily?.best, d.daily.best),
+    streak: num(s.daily?.streak, d.daily.streak),
+    lastPlayed: typeof s.daily?.lastPlayed === 'string' ? s.daily.lastPlayed : d.daily.lastPlayed
+  };
+  const history = {};
+  if (s.history && typeof s.history === 'object') {
+    for (const [k, arr] of Object.entries(s.history)) {
+      if (Array.isArray(arr)) {
+        history[k] = arr.map(x => num(x, 0)).filter(Number.isFinite).slice(-10);
+      }
+    }
+  }
+  const skin = s.skin && SKINS.some(sk => sk.id === s.skin) ? s.skin : d.skin;
+  const music = typeof s.settings?.music === 'number' && Number.isFinite(s.settings.music) ? clamp(s.settings.music, 0, 1) : d.settings.music;
+  const sfx = typeof s.settings?.sfx === 'number' && Number.isFinite(s.settings.sfx) ? clamp(s.settings.sfx, 0, 1) : d.settings.sfx;
+  const settings = Object.assign({}, d.settings, s.settings || {}, { music, sfx });
+  if (typeof settings.touch !== 'string') settings.touch = d.settings.touch;
+  if (typeof settings.walls !== 'string') settings.walls = d.settings.walls;
+  settings.muted = !!settings.muted;
+  settings.shake = settings.shake !== false;
+  settings.flash = settings.flash !== false;
+  settings.rival = !!settings.rival;
+
+  const validBadges = Array.isArray(s.badges) ? s.badges.filter(b => typeof b === 'string') : [];
+
+  return {
+    best,
+    daily,
+    history,
+    levelBest,
+    stars,
+    settings,
+    skin,
+    seenHint: !!s.seenHint,
+    stats,
+    badges: validBadges
+  };
+}
+
 function loadSave() {
   let raw = null;
   try {
@@ -40,23 +114,7 @@ function loadSave() {
     try { localStorage.setItem(SAVE_KEY + '.corrupt', raw); } catch (_) {}
     return defaultSave();
   }
-  const d = defaultSave();
-  const skin = s.skin && SKINS.some(sk => sk.id === s.skin) ? s.skin : 'emerald';
-  const music = typeof s.settings?.music === 'number' && Number.isFinite(s.settings.music) ? clamp(s.settings.music, 0, 1) : d.settings.music;
-  const sfx = typeof s.settings?.sfx === 'number' && Number.isFinite(s.settings.sfx) ? clamp(s.settings.sfx, 0, 1) : d.settings.sfx;
-  const settings = Object.assign(d.settings, s.settings || {}, { music, sfx });
-  return {
-    best: Object.assign(d.best, s.best),
-    daily: Object.assign(d.daily, s.daily || {}),
-    history: s.history || {},
-    levelBest: s.levelBest || {},
-    stars: s.stars || {},
-    settings,
-    skin,
-    seenHint: !!s.seenHint,
-    stats: Object.assign(d.stats, s.stats),
-    badges: s.badges || []
-  };
+  return sanitizeSave(s, defaultSave());
 }
 
 const BADGES = [
@@ -210,7 +268,8 @@ class Game {
     const dirs = Object.values(DIRS);
     const d = dirs[Math.floor(Math.random() * 4)];
     this.demoSnake.skin = SKINS[Math.floor(Math.random() * SKINS.length)];
-    this.demoSnake.reset(randi(4, 15), randi(4, 15), d, 5);
+    const maxSpawnY = Math.max(4, liveRows() - 5);
+    this.demoSnake.reset(randi(4, 15), randi(4, maxSpawnY), d, 5);
     this.demoFood.reset();
     this.spawnDemoApple();
   }
@@ -408,14 +467,16 @@ class Game {
 
   checkBadges() {
     if (this.save.badges.length >= BADGES.length) return;
+    let anyNew = false;
     for (const b of BADGES) {
       if (!this.save.badges.includes(b.id) && b.test(this.save)) {
         this.save.badges.push(b.id);
-        this.persist();
+        anyNew = true;
         this.ui.toast(`🏅 Badge <b>${b.name}</b> unlocked!<br><small>${b.desc}</small>`, 'badge');
         this.sound.achieve();
       }
     }
+    if (anyNew) this.persist();
   }
 
 
@@ -438,7 +499,8 @@ class Game {
 
   isMagnetSafe(x, y) {
     if (!this.isPassableCell(x, y)) return false;
-    if (this.snake.isOccupied(x, y)) return false;
+    const isHead = this.snake && this.snake.head && x === this.snake.head.x && y === this.snake.head.y;
+    if (!isHead && this.snake.isOccupied(x, y)) return false;
     if (this.rival && this.rival.snake && this.rival.snake.isOccupied(x, y)) return false;
     if (this.powerups && this.powerups.occupied && this.powerups.occupied(x, y)) return false;
     return true;
@@ -636,12 +698,44 @@ class Game {
 
   onResize() {
     this.regenDecor();
+    const R = liveRows();
+    if (this.obstacles && this.obstacles._rebuildGrid) {
+      this.obstacles._rebuildGrid(COLS, R);
+    }
+    if (this.snake && this.snake.cells && (this.state === 'playing' || this.state === 'countdown')) {
+      let moved = false;
+      for (const c of this.snake.cells) {
+        if (c.y >= R) { c.y = R - 1; moved = true; }
+        if (c.x >= COLS) { c.x = COLS - 1; moved = true; }
+      }
+      if (moved && this.snake.rebuildOcc) this.snake.rebuildOcc();
+    }
+    if (this.rival && this.rival.snake && this.rival.snake.cells && (this.state === 'playing' || this.state === 'countdown')) {
+      let moved = false;
+      for (const c of this.rival.snake.cells) {
+        if (c.y >= R) { c.y = R - 1; moved = true; }
+        if (c.x >= COLS) { c.x = COLS - 1; moved = true; }
+      }
+      if (moved && this.rival.snake.rebuildOcc) this.rival.snake.rebuildOcc();
+    }
     if (this.food && (this.state === 'playing' || this.state === 'countdown')) {
-      const R = liveRows();
       for (let i = this.food.items.length - 1; i >= 0; i--) {
         const it = this.food.items[i];
         if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
+          this.food._occRemove(it.gx, it.gy);
           this.food.items.splice(i, 1);
+        }
+      }
+      if (this.food.insects) {
+        for (let i = this.food.insects.length - 1; i >= 0; i--) {
+          const ins = this.food.insects[i];
+          if (ins.fy >= R || ins.fx >= COLS || ins.fy < 0 || ins.fx < 0 ||
+              ins.ty >= R || ins.tx >= COLS || ins.ty < 0 || ins.tx < 0) {
+            this.food._occRemove(ins.fx, ins.fy);
+            if (ins.tx !== ins.fx || ins.ty !== ins.fy) this.food._occRemove(ins.tx, ins.ty);
+            this.food.insects.splice(i, 1);
+            this.food._insectCount = this.food.insects.length;
+          }
         }
       }
       if (!this.food.items.some(i => i.type === 'apple' && i.gy < R && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
@@ -649,7 +743,6 @@ class Game {
       }
     }
     if (this.powerups && (this.state === 'playing' || this.state === 'countdown')) {
-      const R = liveRows();
       for (let i = this.powerups.field.length - 1; i >= 0; i--) {
         const p = this.powerups.field[i];
         if (p.gy >= R || p.gx >= COLS || p.gy < 0 || p.gx < 0) {
@@ -657,6 +750,20 @@ class Game {
         }
       }
     }
+  }
+
+  persistZenBest(incrementGame = false) {
+    if (this.mode !== 'zen' || !this.run) return;
+    if (incrementGame) this.save.stats.games++;
+    this.run.time = Math.max(this.run.time || 0, 0);
+    this.save.stats.maxLength = Math.max(this.save.stats.maxLength || 0, this.snake.length);
+    if (this.snake.length > this.save.best.zen) {
+      this.save.best.zen = this.snake.length;
+      this.ui.toast(`🪷 New Zen best length: <b>${this.snake.length}</b>`, 'badge');
+      this.sound.achieve();
+    }
+    this.checkBadges();
+    this.persist();
   }
 
   currentBest() {
@@ -676,11 +783,7 @@ class Game {
     const wasZenActive = this.mode === 'zen' && this.run &&
       (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown');
     if (wasZenActive) {
-      this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
-      if (this.snake.length > this.save.best.zen) {
-        this.save.best.zen = this.snake.length;
-      }
-      this.persist();
+      this.persistZenBest();
     }
     this.sound.unlock();
     this.ui.closeSettingsModal();
@@ -689,6 +792,10 @@ class Game {
     this.mode = mode;
     this.levelIdx = levelIdx;
     const lv = mode === 'level' ? LEVELS[levelIdx] : null;
+    if (mode === 'level' && (!lv || !LEVELS[levelIdx])) {
+      this.gotoMenu();
+      return;
+    }
     this.dailyMods = [];
     let dailyStepMul = 1;
     if (mode === 'daily') {
@@ -706,6 +813,8 @@ class Game {
     this.ui.setHUD(true);
     this.ui.showScreen(null);
     this.ui.setDpadVisible(this.input.mode === 'dpad');
+    this.view.resize();
+    this.onResize();
     this.biomeKey = mode === 'level' ? lv.biome
       : mode === 'daily' ? ['rainforest', 'oasis', 'cavern', 'reef'][epochDays() % 4]
       : mode === 'timeattack' ? 'oasis' : mode === 'zen' ? 'reef' : 'rainforest';
@@ -728,11 +837,14 @@ class Game {
     this.particles.clear();
     this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0 };
     this.stepMs = mode === 'level' ? lv.stepMs : CONFIG.stepMs[mode] || CONFIG.stepMs.classic;
+    const runId = (this._runId = (this._runId || 0) + 1);
+    this._nearMissCd = 0;
+    this._rivalRespawnIn = 0;
     if (this.mode === 'daily') {
       this.stepMs = Math.round(this.stepMs * dailyStepMul);
       const modsHtml = this.dailyMods.map(m => `${dk[m.id] || '•'} <b>${m.label}</b> — ${m.desc}`).join('<br>');
       setTimeout(() => {
-        if (this.state === 'playing' || this.state === 'countdown') {
+        if (this._runId === runId && (this.state === 'playing' || this.state === 'countdown')) {
           this.ui.toast(`📅 Today's twist:<br>${modsHtml}`, 'biome');
         }
       }, 1400);
@@ -752,7 +864,7 @@ class Game {
     this._lastBurstI = 0;
     const biomeName = this.biome.name;
     setTimeout(() => {
-      if (this.state === 'playing' || this.state === 'countdown') {
+      if (this._runId === runId && (this.state === 'playing' || this.state === 'countdown')) {
         this.ui.toast(`${{ rainforest: '🌿', oasis: '🏜️', cavern: '💎', reef: '🌊' }[this.biomeKey] || '🌿'} <b>${biomeName}</b>`, 'biome');
       }
     }, 650);
@@ -797,7 +909,7 @@ class Game {
     
     // 3-2-1 Countdown before action starts
     this.state = 'countdown';
-    this.countdownTimer = 1600;
+    this.countdownTimer = 1350;
     this.countdownNum = 3;
     this.ui.showCountdown(3);
     this.sound.startMusic(this.biome.music);
@@ -812,15 +924,7 @@ class Game {
       this.recordDailyScore();
     }
     if (this.mode === 'zen' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
-      this.run.time = Math.max(this.run.time, 0);
-      this.save.stats.games++;
-      this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
-      if (this.snake.length > this.save.best.zen) {
-        this.save.best.zen = this.snake.length;
-        this.ui.toast(`🪷 New Zen best length: <b>${this.snake.length}</b>`, 'badge');
-        this.sound.achieve();
-      }
-      this.checkBadges();
+      this.persistZenBest(true);
     }
     this.state = 'menu';
     this.mode = 'classic';
@@ -835,6 +939,8 @@ class Game {
     this.ui.setHUD(false);
     this.ui.showScreen('menu');
     this.ui.setDpadVisible(false);
+    this.view.forcedRows = null;
+    this.rival = null;
     this.view.resize();
     this.onResize();
     if (this._urgent) {
@@ -854,7 +960,7 @@ class Game {
       streak: this.save.daily.streak || 0,
       playedToday: this.save.daily.key === today
     };
-    this.ui.updateMenuSubLabels(this.save.best, this.sumStars(), LEVELS.length * 3, { daily, badgesCount: this.save.badges.length }, this.save.skin);
+    this.ui.updateMenuSubLabels(this.save.best, this.sumStars(), LEVELS.length * 3, { daily, badgesCount: this.save.badges.length, badgesTotal: BADGES.length }, this.save.skin);
     this.ui.setMenuStats(
       `🐍 Classic <b>${this.save.best.classic}</b><span>·</span>⏱ Attack <b>${this.save.best.timeattack}</b>` +
       `<span>·</span>🪷 Zen <b>${this.save.best.zen}</b><span>·</span>🍎 <b>${s.apples}</b>` +
@@ -870,19 +976,17 @@ class Game {
 
   togglePause() {
     if (this.state === 'playing' || this.state === 'countdown') {
+      this._stateBeforePause = this.state;
       this.state = 'paused';
-      if (this.mode === 'zen' && this.run) {
-        this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
-        if (this.snake.length > this.save.best.zen) {
-          this.save.best.zen = this.snake.length;
-        }
-        this.persist();
-      }
+      this.persistZenBest();
       this.ui.hideCountdown();
       this.burst = false;
       if (this._lastBurstI) {
         this._lastBurstI = 0;
         this.sound.setIntensity(0);
+      }
+      if (this.input && this.input.setBurstVisual) {
+        this.input.setBurstVisual(false);
       }
       this.clearTransientHUD();
       this.ui.showPauseStats({
@@ -894,7 +998,12 @@ class Game {
       this.ui.setPauseTip(PAUSE_TIPS[Math.floor(Math.random() * PAUSE_TIPS.length)]);
       this.ui.showScreen('pause');
     } else if (this.state === 'paused') {
-      this.state = 'playing';
+      if (this._stateBeforePause === 'countdown' && this.countdownTimer > 0) {
+        this.state = 'countdown';
+        this.ui.showCountdown(this.countdownNum || 3);
+      } else {
+        this.state = 'playing';
+      }
       this.hudTimer = CONFIG.hudThrottleMs;
       this.ui.showScreen(null);
     }
@@ -909,7 +1018,7 @@ class Game {
     this.ui.closeSettingsModal();
   }
 
-  applySettings() {
+  applySettings(skipResize = false) {
     this.sound.setVolumes(this.save.settings);
     this.input.setPref(this.save.settings.touch);
     // Rival toggle: removing it despawns immediately (any state); enabling it
@@ -924,8 +1033,10 @@ class Game {
     if (this.state === 'playing' || this.state === 'countdown') {
       this.ui.setDpadVisible(this.input.mode === 'dpad');
     }
-    this.view.resize();
-    this.onResize();
+    if (!skipResize) {
+      this.view.resize();
+      this.onResize();
+    }
     this.persist();
   }
 
@@ -1124,9 +1235,17 @@ class Game {
     this.state = 'over';
     this.dissolving = true;
     this.burst = false;
+    this._rivalRespawnIn = 0;
     if (this._lastBurstI) {
       this._lastBurstI = 0;
       this.sound.setIntensity(0);
+    }
+    if (this.input && this.input.setBurstVisual) {
+      this.input.setBurstVisual(false);
+    }
+    if (this._urgent) {
+      this._urgent = false;
+      this.ui.setUrgent(false);
     }
     this.clearTransientHUD();
     this.sound.death();
@@ -1138,18 +1257,25 @@ class Game {
       rock: { shake: 10, flash: '#b0bec5', burst: ['#90a4ae', '#cfd8dc', '#ffffff'] },
       bramble: { shake: 6, flash: '#69f0ae', burst: ['#69f0ae', '#3a6b4a', '#e05252'] },
       spore: { shake: 7, flash: '#b388ff', burst: ['#b388ff', '#7c43bd', '#e1bee7'] },
+      rival: { shake: 8, flash: '#b388ff', burst: ['#b388ff', '#f8bbd0', '#7c43bd'] },
       time: { shake: 4, flash: '#ffd54a', burst: ['#ffd54a', '#fff59d'] }
     };
     const fx = causeFx[cause] || causeFx.wall;
     if (this.save.settings.shake !== false) this.particles.shake(fx.shake);
     if (this.save.settings.flash !== false) this.particles.flash(fx.flash, cause === 'rock' ? 0.34 : 0.28);
     const dsp2 = this.snake.sampleSpine(this.view, this.tInterp);
-    for (const strand of dsp2.all) {
-      for (let i = 0; i < strand.length; i += 3) {
-        this.particles.burst(strand[i].px, strand[i].py, {
-          count: 6, colors: [this.snake.skin.c1, this.snake.skin.c2, ...fx.burst],
-          speed: 0.12, size: 2.4, life: 800, grav: 0.0004
-        });
+    if (dsp2 && dsp2.all) {
+      for (const strand of dsp2.all) {
+        if (!strand) continue;
+        for (let i = 0; i < strand.length; i += 3) {
+          const pt = strand[i];
+          if (pt && Number.isFinite(pt.px) && Number.isFinite(pt.py)) {
+            this.particles.burst(pt.px, pt.py, {
+              count: 6, colors: [this.snake.skin.c1, this.snake.skin.c2, ...fx.burst],
+              speed: 0.12, size: 2.4, life: 800, grav: 0.0004
+            });
+          }
+        }
       }
     }
     this.finishRun(false, CAUSE_TITLE[cause] || 'Game Over', cause === 'time');
@@ -1170,12 +1296,18 @@ class Game {
       );
     }
     const rsp = r.snake.sampleSpine(this.view, r.tFrac);
-    for (const strand of rsp.all) {
-      for (let i = 0; i < strand.length; i += 3) {
-        this.particles.burst(strand[i].px, strand[i].py, {
-          count: 6, colors: ['#b388ff', '#f8bbd0', '#ffffff'],
-          speed: 0.12, size: 2.4, life: 800, grav: 0.0004
-        });
+    if (rsp && rsp.all) {
+      for (const strand of rsp.all) {
+        if (!strand) continue;
+        for (let i = 0; i < strand.length; i += 3) {
+          const pt = strand[i];
+          if (pt && Number.isFinite(pt.px) && Number.isFinite(pt.py)) {
+            this.particles.burst(pt.px, pt.py, {
+              count: 6, colors: ['#b388ff', '#f8bbd0', '#ffffff'],
+              speed: 0.12, size: 2.4, life: 800, grav: 0.0004
+            });
+          }
+        }
       }
     }
     this.particles.popup(
@@ -1186,23 +1318,9 @@ class Game {
     this.sound.rivalDown(this._pan);
     if (this.save.settings.flash !== false) this.particles.flash('#b388ff', 0.12);
     // Respawn after a short delay so the run keeps its competitor.
-    // _rivalRunId is incremented here; the callback checks it to detect stale callbacks
-    // that fired after the player restarted or quit.
     const spawnId = (this._rivalRunId = (this._rivalRunId || 0) + 1);
-    setTimeout(() => {
-      if (this._rivalRunId !== spawnId) return;   // stale: run has moved on
-      if (this.save.settings.rival && !this.rival && this.mode === 'classic'
-          && this.state === 'playing') {
-        this.rival = new Rival();
-        this.rival.reset(this.view, this.snake.cells || [], null, 5);
-        const nr = this.rival.snake.head;
-        this.particles.burst(this.view.cx(nr.x), this.view.cy(nr.y), {
-          count: 16, colors: ['#b388ff', '#f8bbd0', '#ffffff'], speed: 0.14, size: 2.2, life: 600, type: 'glow'
-        });
-        this.particles.popup(this.view.cx(nr.x), this.view.cy(nr.y) - this.view.cell,
-          'A new rival slithers in…', '#b388ff', 14);
-      }
-    }, 2600);
+    this._rivalRespawnIn = 2600;
+    this._rivalPendingRespawnId = spawnId;
   }
 
   recordDailyScore() {
@@ -1219,9 +1337,9 @@ class Game {
     d.lastPlayed = today;
     const score = this.run ? this.run.score : 0;
     if (score > d.best) d.best = score;
-    if (!this._dailyCountedToday) {
+    if (this._dailyCountedDay !== today) {
       this.save.stats.dailyPlayed = (this.save.stats.dailyPlayed || 0) + 1;
-      this._dailyCountedToday = true;
+      this._dailyCountedDay = today;
     }
     this.checkBadges();
     this.persist();
@@ -1244,7 +1362,12 @@ class Game {
       }
     };
     if (navigator.share) {
-      navigator.share({ text }).then(() => this.ui.toast('📤 Result shared!', 'hint')).catch(copyFallback);
+      navigator.share({ text })
+        .then(() => this.ui.toast('📤 Result shared!', 'hint'))
+        .catch(err => {
+          if (err && err.name === 'AbortError') return;
+          copyFallback();
+        });
     } else {
       copyFallback();
     }
@@ -1262,10 +1385,8 @@ class Game {
     } else if (this.mode === 'zen') {
       if (this.snake.length > s.best.zen) { s.best.zen = this.snake.length; newBest = true; }
     } else if (this.mode === 'daily') {
-      // recordDailyScore() (called below) is the authoritative handler for daily.best and streak.
-      // Capture the newBest flag here — before recordDailyScore() can reset daily.best on a new-day boundary —
-      // so the game-over NEW BEST banner still fires correctly.
-      newBest = this.run.score > (s.daily.best || 0);
+      // Compare against today's current best (which checks today's date key)
+      newBest = this.run.score > this.currentBest();
     } else if (this.mode === 'level') {
       const prev = s.levelBest[this.levelIdx] || 0;
       if (this.run.score > prev) { s.levelBest[this.levelIdx] = this.run.score; newBest = true; }
@@ -1298,17 +1419,30 @@ class Game {
     if (!gentle) {
       setTimeout(() => {
         if (this.state !== 'over') return;
+        if (this.sound && typeof this.sound.deathJingle === 'function') {
+          this.sound.deathJingle();
+        }
         this.ui.gameOver(rows);
-      }, 1000);
+      }, 700);
     } else {
-      this.dissolving = false;
-      this.sound.powerExpire();
+      if (this.sound && typeof this.sound.powerExpire === 'function') {
+        this.sound.powerExpire();
+      }
       this.ui.gameOver(rows);
     }
   }
 
   completeLevel() {
     this.state = 'complete';
+    this.burst = false;
+    this._rivalRespawnIn = 0;
+    if (this._lastBurstI) {
+      this._lastBurstI = 0;
+      this.sound.setIntensity(0);
+    }
+    if (this.input && this.input.setBurstVisual) {
+      this.input.setBurstVisual(false);
+    }
     this.clearTransientHUD();
     const lv = LEVELS[this.levelIdx];
     const sc = this.run.score;
@@ -1327,16 +1461,20 @@ class Game {
     this.checkBadges();
     this.persist();
     for (let i = 0; i < stars; i++) {
-      setTimeout(() => this.sound.star(i), 350 + i * 280);
+      setTimeout(() => {
+        if (this.state === 'complete') this.sound.star(i);
+      }, 350 + i * 280);
     }
     const cx = this.view.w / 2;
     const cy = this.view.h / 2;
     for (let i = 0; i < 5; i++) {
       setTimeout(() => {
-        this.particles.burst(cx + rand(-100, 100), cy + rand(-60, 60), {
-          count: 18, colors: ['#ffd54a', '#7ee08a', '#69b7ff', '#ff9ad5'],
-          speed: 0.18, size: 2.6, life: 900, grav: 0.0003, type: 'spark'
-        });
+        if (this.state === 'complete') {
+          this.particles.burst(cx + rand(-100, 100), cy + rand(-60, 60), {
+            count: 18, colors: ['#ffd54a', '#7ee08a', '#69b7ff', '#ff9ad5'],
+            speed: 0.18, size: 2.6, life: 900, grav: 0.0003, type: 'spark'
+          });
+        }
       }, i * 160);
     }
     const nextStarScore = stars === 1 ? lv.stars[1] : stars === 2 ? lv.stars[2] : null;
@@ -1373,7 +1511,19 @@ class Game {
     }
     const h = this.snake.head;
     if (this.effects.magnet > 0) {
-      this.food.magnetPull(h, (x, y) => this.isMagnetSafe(x, y));
+      this.food.magnetPull(
+        h,
+        (x, y) => this.isMagnetSafe(x, y),
+        env.wrap,
+        this.burst,
+        this.particles,
+        this.view,
+        () => {
+          if (this.sound && typeof this.sound.magnetTick === 'function') {
+            this.sound.magnetTick();
+          }
+        }
+      );
     }
     const item = this.food.collideCell(h.x, h.y);
     if (item) {
@@ -1412,7 +1562,6 @@ class Game {
       this.lastLen = newLen;
     }
     // Near-miss: skim past a hazard without touching it for bonus points
-    if (this._nearMissCd > 0) this._nearMissCd -= dt;
     if (this._nearMissCd <= 0) {
       const nd = this.obstacles.nearMissDistance(h.x, h.y);
       if (nd !== null && nd <= CONFIG.nearMissDist) {
@@ -1434,6 +1583,7 @@ class Game {
     if (this.mode === 'zen') {
       this.save.stats.maxLength = Math.max(this.save.stats.maxLength, this.snake.length);
       if (this.snake.length > this.save.best.zen) {
+        this.maybeNewBest();
         this.save.best.zen = this.snake.length;
         this.persist();
       }
@@ -1473,6 +1623,16 @@ class Game {
         { v: 'Zen Flow', l: '', icon: '🪷', cls: 'biome-stat' },
         { v: String(this.snake.length), l: 'Length', icon: '📏' }
       ];
+    } else if (this.mode === 'daily') {
+      const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
+      const biomeIcon = this.biomeKey === 'rainforest' ? '🌿' : this.biomeKey === 'oasis' ? '☀️' : this.biomeKey === 'cavern' ? '💎' : '🌊';
+      const biomeName = this.biome.name.split(' ')[0];
+      const modsSummary = (this.dailyMods || []).map(m => m.label).join(' · ') || 'Daily Challenge';
+      stats = [
+        { v: biomeName, l: modsSummary, icon: biomeIcon, cls: 'biome-stat ' + this.biomeKey, title: modsSummary },
+        { v: String(this.snake.length), l: 'Length', icon: '📏' },
+        { v: speed, l: 'Speed', icon: '⚡' }
+      ];
     } else {
       const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
       const nextBiomeIn = 12 - (this.run.foodEaten % 12);
@@ -1491,7 +1651,7 @@ class Game {
     } else if (this.mode === 'timeattack') {
       const frac = clamp(this.taTime / CONFIG.taStartMs, 0, 1);
       bar = { frac, color: this.taTime <= CONFIG.taUrgentMs ? '#ff6b6b' : 'var(--gold)' };
-    } else if (this.combo >= 1 && this.comboTimer > 0) {
+    } else if (this.combo >= 2 && this.comboTimer > 0) {
       const frac = clamp(this.comboTimer / CONFIG.comboMs, 0, 1);
       bar = { frac, color: this.combo >= 4 ? '#ff69b4' : 'var(--gold)' };
     }
@@ -1499,7 +1659,7 @@ class Game {
       score: this.run.score,
       best: this.currentBest(),
       stats,
-      combo: this.combo >= 1 ? `COMBO ×${this.combo}` : null,
+      combo: this.combo >= 2 ? `COMBO ×${this.combo}` : null,
       bar
     });
     const chips = [];
@@ -1521,6 +1681,17 @@ class Game {
     this.time += dt;
     this.particles.update(dt);
     this.particles.ambient(this.state === 'menu' || this.state === 'playing' || this.state === 'countdown' ? this.biomeKey : null, this.view.w, this.view.h, dt);
+    // Rival serpent respawn timer
+    if (this._rivalRespawnIn > 0 && this.state === 'playing') {
+      this._rivalRespawnIn -= dt;
+      if (this._rivalRespawnIn <= 0) {
+        this._rivalRespawnIn = 0;
+        if (this._rivalPendingRespawnId === this._rivalRunId && this.mode === 'classic' && this.save.settings.rival) {
+          this.rival = new Rival();
+          this.rival.reset(this.view, this.snake.cells || [], null, 6);
+        }
+      }
+    }
     // Rival serpent: think + move on the real frame clock, its own cadence.
     // Pace adapts to the player's speed curve so it stays threatening late-game.
     if (this.rival && this.state === 'playing') {
@@ -1546,9 +1717,8 @@ class Game {
           if (stolen.type === 'apple') {
             this.rival.snake.grow(1);   // same growth rate as the player
             this.rival.snake.eatPulse();
-            if (this.rival.snake.length >= 13) {
-              // Size cap: keep the rival a peer, not a board-filling leviathan
-              this.rival.snake.growPending = 0;
+            if (this.rival.snake.length + this.rival.snake.growPending > 13) {
+              this.rival.snake.growPending = Math.max(0, 13 - this.rival.snake.length);
             }
             this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
               count: 10, colors: ['#b388ff', '#e53935', '#ff8a80'], speed: 0.1, size: 2, life: 450
@@ -1562,8 +1732,8 @@ class Game {
           } else if (stolen.type === 'golden') {
             this.rival.snake.grow(2);
             this.rival.snake.eatPulse();
-            if (this.rival.snake.length >= 13) {
-              this.rival.snake.growPending = 0;
+            if (this.rival.snake.length + this.rival.snake.growPending > 13) {
+              this.rival.snake.growPending = Math.max(0, 13 - this.rival.snake.length);
             }
             this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
               count: 14, colors: ['#ffd54a', '#b388ff', '#ffffff'], speed: 0.12, size: 2.2, life: 550, type: 'spark'
@@ -1574,8 +1744,8 @@ class Game {
           } else if (stolen.type === 'egg') {
             this.rival.snake.grow(2);
             this.rival.snake.eatPulse();
-            if (this.rival.snake.length >= 13) {
-              this.rival.snake.growPending = 0;
+            if (this.rival.snake.length + this.rival.snake.growPending > 13) {
+              this.rival.snake.growPending = Math.max(0, 13 - this.rival.snake.length);
             }
             this.particles.burst(this.view.cx(rh.x), this.view.cy(rh.y), {
               count: 14, colors: ['#f8f4e6', '#b388ff', '#d9cba8'], speed: 0.12, size: 2.2, life: 550
@@ -1596,8 +1766,9 @@ class Game {
     }
     if (this.state === 'countdown') {
       this.countdownTimer -= dt;
-      const step = Math.ceil(this.countdownTimer / 450);
-      if (step !== this.countdownNum && step >= 0) {
+      this.snake.tick(dt, 0);
+      const step = Math.min(3, Math.max(0, Math.ceil(this.countdownTimer / 450)));
+      if (step !== this.countdownNum) {
         this.countdownNum = step;
         if (step > 0) {
           this.ui.showCountdown(step);
@@ -1609,23 +1780,31 @@ class Game {
       }
       if (this.countdownTimer <= 0) {
         this.state = 'playing';
-        this.ui.hideCountdown();
+        setTimeout(() => {
+          if (this.state === 'playing') this.ui.hideCountdown();
+        }, 350);
       }
       return;
     }
     if (this.state === 'over' && this.dissolving && this.deathFade > 0) {
+      this.snake.tick(dt, 0);
       this.deathFade = Math.max(0, this.deathFade - dt * 0.0014);
       if (Math.random() < 0.5) {
         const dsp = this.snake.sampleSpine(this.view, this.tInterp);
-        const flat = dsp.all[0];
-        const dp = flat[Math.floor(Math.random() * flat.length)];
-        this.particles.burst(dp.px, dp.py, {
-          count: 2, colors: [this.snake.skin.c1, this.snake.skin.c2, '#ff8a80'],
-          speed: 0.06, size: 2, life: 600
-        });
+        const flat = dsp && dsp.all && dsp.all[0];
+        if (flat && flat.length > 0) {
+          const dp = flat[Math.floor(Math.random() * flat.length)];
+          if (dp && Number.isFinite(dp.px) && Number.isFinite(dp.py)) {
+            this.particles.burst(dp.px, dp.py, {
+              count: 2, colors: [this.snake.skin.c1, this.snake.skin.c2, '#ff8a80'],
+              speed: 0.06, size: 2, life: 600
+            });
+          }
+        }
       }
     }
     if (this.state !== 'playing') return;
+    if (this._nearMissCd > 0) this._nearMissCd = Math.max(0, this._nearMissCd - dt);
     for (const k of ['magnet', 'slow', 'ghost', 'multi']) {
       if (this.effects[k] > 0) {
         this.effects[k] -= dt;
@@ -1649,6 +1828,16 @@ class Game {
         this.taTime = 0;
         this.state = 'over';
         this.burst = false;
+        if (this.input && this.input.setBurstVisual) {
+          this.input.setBurstVisual(false);
+        }
+        if (this.ui && this.ui.setBurstActive) {
+          this.ui.setBurstActive(false);
+        }
+        if (this._urgent) {
+          this._urgent = false;
+          this.ui.setUrgent(false);
+        }
         if (this._lastBurstI) {
           this._lastBurstI = 0;
           this.sound.setIntensity(0);
@@ -1931,7 +2120,10 @@ const ui = new UIManager({
     game.startRun(game.mode, game.levelIdx);
   },
   onQuit() { game.gotoMenu(); },
-  onNextLevel() { game.startRun('level', game.levelIdx + 1); },
+  onNextLevel() {
+    if (game.levelIdx + 1 < LEVELS.length) game.startRun('level', game.levelIdx + 1);
+    else game.gotoMenu();
+  },
   onResetProgress() {
     game.save = defaultSave();
     game.persist();
@@ -1941,7 +2133,8 @@ const ui = new UIManager({
   },
   onSettingsChange(patch) {
     Object.assign(game.save.settings, patch);
-    game.applySettings();
+    const audioOnly = Object.keys(patch).every(k => k === 'music' || k === 'sfx' || k === 'muted');
+    game.applySettings(audioOnly);
   },
   onPreviewSound(type) {
     sound.unlock();
@@ -1989,23 +2182,7 @@ const ui = new UIManager({
     try {
       const obj = JSON.parse(txt);
       if (!obj || typeof obj !== 'object' || !obj.best || !obj.settings) throw new Error('shape');
-      const d = defaultSave();
-      const skin = obj.skin && SKINS.some(sk => sk.id === obj.skin) ? obj.skin : 'emerald';
-      const music = typeof obj.settings?.music === 'number' && Number.isFinite(obj.settings.music) ? clamp(obj.settings.music, 0, 1) : d.settings.music;
-      const sfx = typeof obj.settings?.sfx === 'number' && Number.isFinite(obj.settings.sfx) ? clamp(obj.settings.sfx, 0, 1) : d.settings.sfx;
-      const settings = Object.assign(d.settings, obj.settings || {}, { music, sfx });
-      game.save = {
-        best: Object.assign(d.best, obj.best),
-        daily: Object.assign(d.daily, obj.daily || {}),
-        history: obj.history || {},
-        levelBest: obj.levelBest || {},
-        stars: obj.stars || {},
-        settings,
-        skin,
-        seenHint: !!obj.seenHint,
-        stats: Object.assign(d.stats, obj.stats),
-        badges: Array.isArray(obj.badges) ? obj.badges : []
-      };
+      game.save = sanitizeSave(obj, defaultSave());
       game.persist();
       game.applySettings();
       ui.syncSettings(game.save.settings);
@@ -2022,7 +2199,7 @@ game.ui = ui;
 
 const input = new InputManager(stage, {
   onDir(dir) {
-    if (game.state === 'playing') game.snake.queueDir(DIRS[dir]);
+    if (game.state === 'playing' || game.state === 'countdown') game.snake.queueDir(DIRS[dir]);
   },
   onPause() {
     if (game.state === 'playing' || game.state === 'paused') game.togglePause();
@@ -2064,15 +2241,9 @@ const input = new InputManager(stage, {
     ui.toast(game.save.settings.muted ? '🔇 Muted (M)' : '🔊 Sound on (M)', 'hint');
   },
   onRestartKey() {
-    if (game.state === 'over' || game.state === 'paused') {
-      if (game.mode === 'zen' && game.run && game.state === 'paused') {
-        game.save.stats.games++;
-        game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
-        if (game.snake.length > game.save.best.zen) {
-          game.save.best.zen = game.snake.length;
-          game.persist();
-        }
-        game.checkBadges();
+    if (game.state === 'over' || game.state === 'paused' || game.state === 'complete') {
+      if (game.mode === 'zen' && game.run && (game.state === 'paused' || game.state === 'playing')) {
+        game.persistZenBest(true);
       }
       ui.toast('↻ Restarted', 'hint');
       game.startRun(game.mode, game.levelIdx);
@@ -2114,17 +2285,19 @@ loop.start();
 let _rzT = null;
 window.addEventListener('resize', () => {
   view.resize();
+  game.onResize();
   clearTimeout(_rzT);
-  _rzT = setTimeout(() => game.onResize(), 150);
+  _rzT = setTimeout(() => {
+    view.resize();
+    game.onResize();
+  }, 150);
 });
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
-      game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
-      if (game.snake.length > game.save.best.zen) {
-        game.save.best.zen = game.snake.length;
-      }
+      game.persistZenBest(false);
+    } else {
       game.persist();
     }
     if (game.state === 'playing' || game.state === 'countdown') game.togglePause();
@@ -2136,10 +2309,8 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('blur', () => {
   if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
-    game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
-    if (game.snake.length > game.save.best.zen) {
-      game.save.best.zen = game.snake.length;
-    }
+    game.persistZenBest(false);
+  } else {
     game.persist();
   }
   if (game.state === 'playing' || game.state === 'countdown') game.togglePause();
@@ -2147,10 +2318,8 @@ window.addEventListener('blur', () => {
 
 window.addEventListener('beforeunload', () => {
   if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
-    game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
-    if (game.snake.length > game.save.best.zen) {
-      game.save.best.zen = game.snake.length;
-    }
+    game.persistZenBest(false);
+  } else {
     game.persist();
   }
 });
@@ -2162,6 +2331,6 @@ const unlockOnce = () => {
 window.addEventListener('pointerdown', unlockOnce, { once: true });
 window.addEventListener('keydown', unlockOnce, { once: true });
 
-Object.assign(BS, { game, ui, input, view, sound });
+Object.assign(BS, { game, ui, input, view, sound, loop, BADGES });
 })(window.BS);
 

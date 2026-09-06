@@ -59,7 +59,7 @@ class Particles {
   }
 
   shake(m) {
-    if (REDUCED_MOTION) m *= 0.35;
+    if (BS.REDUCED_MOTION ?? REDUCED_MOTION) m *= 0.35;
     this.shakeMag = Math.max(this.shakeMag, m);
   }
 
@@ -101,18 +101,12 @@ class Particles {
       if (this.list.length < MAX_PARTICLES) {
         this.list.push(p);
       } else {
-        // Hard clamp at 200: shed oldest / lowest-life first
-        let minIdx = 0;
-        let minLife = this.list[0].life;
-        for (let j = 1; j < this.list.length; j++) {
-          if (this.list[j].life < minLife) {
-            minLife = this.list[j].life;
-            minIdx = j;
-          }
-        }
-        const old = this.list[minIdx];
+        // Hard clamp at 200: circular overwrite of oldest particles (O(1))
+        this._overflowCursor = (this._overflowCursor || 0) % this.list.length;
+        const old = this.list[this._overflowCursor];
         if (this._pool.length < 256) this._pool.push(old);
-        this.list[minIdx] = p;
+        this.list[this._overflowCursor] = p;
+        this._overflowCursor = (this._overflowCursor + 1) % MAX_PARTICLES;
       }
     }
   }
@@ -126,43 +120,43 @@ class Particles {
     if (!key) return;
     this._ambAcc += dt;
     let interval = key === 'cavern' ? 260 : 340;
-    if (REDUCED_MOTION) interval *= 3;
+    if (BS.REDUCED_MOTION ?? REDUCED_MOTION) interval *= 3;
     while (this._ambAcc > interval) {
       this._ambAcc -= interval;
       if (this.list.length >= 180) break;
       if (this.list.length >= MAX_PARTICLES) break;
       if (key === 'rainforest') {
-        this.list.push({
-          x: rand(0, w), y: -10,
-          vx: rand(0.008, 0.03), vy: rand(0.02, 0.05),
-          life: 9000, maxLife: 9000,
-          size: rand(3, 6), color: pick(['#3f7d4b', '#57a05a', '#2f6640']),
-          type: 'leaf', grav: 0, rot: rand(0, TAU), vr: rand(-0.002, 0.002)
-        });
+        const p = this._pool.pop() || {};
+        p.x = rand(0, w); p.y = -10;
+        p.vx = rand(0.008, 0.03); p.vy = rand(0.02, 0.05);
+        p.life = 9000; p.maxLife = 9000;
+        p.size = rand(3, 6); p.color = pick(['#3f7d4b', '#57a05a', '#2f6640']);
+        p.type = 'leaf'; p.grav = 0; p.rot = rand(0, TAU); p.vr = rand(-0.002, 0.002);
+        this.list.push(p);
       } else if (key === 'oasis') {
-        this.list.push({
-          x: rand(0, w), y: rand(0, h),
-          vx: rand(0.02, 0.06), vy: rand(-0.004, 0.004),
-          life: 6000, maxLife: 6000,
-          size: rand(1, 2.4), color: pick(['#e8c98a', '#d9a95f']),
-          type: 'dot', grav: 0, rot: 0, vr: 0
-        });
+        const p = this._pool.pop() || {};
+        p.x = rand(0, w); p.y = rand(0, h);
+        p.vx = rand(0.02, 0.06); p.vy = rand(-0.004, 0.004);
+        p.life = 6000; p.maxLife = 6000;
+        p.size = rand(1, 2.4); p.color = pick(['#e8c98a', '#d9a95f']);
+        p.type = 'dot'; p.grav = 0; p.rot = 0; p.vr = 0;
+        this.list.push(p);
       } else if (key === 'cavern') {
-        this.list.push({
-          x: rand(0, w), y: rand(0, h),
-          vx: rand(-0.006, 0.006), vy: rand(-0.015, -0.004),
-          life: 7000, maxLife: 7000,
-          size: rand(1.5, 3), color: pick(['#6ee7f0', '#8f7bff', '#54d0c8']),
-          type: 'glow', grav: 0, rot: 0, vr: 0
-        });
+        const p = this._pool.pop() || {};
+        p.x = rand(0, w); p.y = rand(0, h);
+        p.vx = rand(-0.006, 0.006); p.vy = rand(-0.015, -0.004);
+        p.life = 7000; p.maxLife = 7000;
+        p.size = rand(1.5, 3); p.color = pick(['#6ee7f0', '#8f7bff', '#54d0c8']);
+        p.type = 'glow'; p.grav = 0; p.rot = 0; p.vr = 0;
+        this.list.push(p);
       } else if (key === 'reef') {
-        this.list.push({
-          x: rand(0, w), y: h + 8,
-          vx: rand(-0.008, 0.008), vy: rand(-0.05, -0.025),
-          life: 8000, maxLife: 8000,
-          size: rand(2, 5), color: pick(['#9fdcf0', '#cfeef8']),
-          type: 'bubble', grav: 0, rot: 0, vr: 0
-        });
+        const p = this._pool.pop() || {};
+        p.x = rand(0, w); p.y = h + 8;
+        p.vx = rand(-0.008, 0.008); p.vy = rand(-0.05, -0.025);
+        p.life = 8000; p.maxLife = 8000;
+        p.size = rand(2, 5); p.color = pick(['#9fdcf0', '#cfeef8']);
+        p.type = 'bubble'; p.grav = 0; p.rot = 0; p.vr = 0;
+        this.list.push(p);
       }
     }
   }
