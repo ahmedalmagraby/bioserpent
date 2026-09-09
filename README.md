@@ -1,5 +1,9 @@
 # 🐍 BioSerpent — Biomimetic Organic Snake Garden
 
+[![Play Online](https://img.shields.io/badge/🎮_Play_BioSerpent-Live_Demo-emerald?style=for-the-badge)](https://ahmedalmagraby.github.io/bioserpent/)
+
+> **Play Live**: **[https://ahmedalmagraby.github.io/bioserpent/](https://ahmedalmagraby.github.io/bioserpent/)**
+
 **BioSerpent** is a fluid, modern web-based reimagining of the classic Snake arcade game featuring biomimetic organic motion, procedural animations, dynamic audio synthesis, particles, distinct biomes, diverse food & power-up systems, campaign levels, and multiple game modes.
 
 ---
@@ -72,8 +76,12 @@ node tests/run-all-tests.js
 
 BioSerpent runs completely client-side in any modern web browser with zero external dependencies or build steps required.
 
-### 1. Run Locally
-Open index.html directly in your browser or run a simple local web server:
+### 1. Play Online
+Jump straight into the game in your browser:
+👉 **[Play BioSerpent on GitHub Pages](https://ahmedalmagraby.github.io/bioserpent/)**
+
+### 2. Run Locally
+Open `index.html` directly in your browser or run a simple local web server:
 
 ```bash
 # Using Python
