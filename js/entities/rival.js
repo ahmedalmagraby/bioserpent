@@ -46,21 +46,39 @@ class Rival {
   // Spawn on the right side heading left, away from the player's start, keeping
   // `sep` manhattan clearance from every player cell. Falls back gracefully.
   reset(view, playerCells, blockedFn, sep = 6) {
-    const R = view.rows;
-    const rows = [Math.floor(R / 2), Math.floor(R / 2) - 3, Math.floor(R / 2) + 3, 2, R - 3];
-    for (const y of rows) {
-      if (y < 1 || y > R - 2) continue;
-      for (let hx = COLS - 4; hx >= 8; hx--) {
-        let ok = true;
-        for (let i = 0; i < 4; i++) {
-          const cx = hx + i;
-          if (blockedFn && blockedFn(cx, y)) { ok = false; break; }
-          for (const c of playerCells) {
-            if (Math.abs(c.x - cx) + Math.abs(c.y - y) < sep) { ok = false; break; }
+    const R = (view && view.rows) || 20;
+    const isPlayer = (x, y) => playerCells && playerCells.some(c => c.x === x && c.y === y);
+    for (let s = sep; s >= 1; s--) {
+      const rows = [Math.floor(R / 2), Math.floor(R / 2) - 3, Math.floor(R / 2) + 3, 2, R - 3];
+      for (const y of rows) {
+        if (y < 1 || y > R - 2) continue;
+        for (let hx = COLS - 4; hx >= 2; hx--) {
+          let ok = true;
+          for (let i = 0; i < 4; i++) {
+            const cx = hx + i;
+            if (cx >= COLS) { ok = false; break; }
+            if (blockedFn && blockedFn(cx, y)) { ok = false; break; }
+            if (isPlayer(cx, y)) { ok = false; break; }
+            if (s > 1) {
+              for (const c of playerCells) {
+                if (Math.abs(c.x - cx) + Math.abs(c.y - y) < s) { ok = false; break; }
+              }
+            }
+            if (!ok) break;
           }
-          if (!ok) break;
+          if (ok) {
+            this.snake.reset(hx, y, { x: -1, y: 0 }, 4);
+            this.acc = 0;
+            this.dead = false;
+            return;
+          }
         }
-        if (ok) {
+      }
+    }
+    // Last resort: find any free 4-cell row not overlapping player
+    for (let y = 1; y < R - 1; y++) {
+      for (let hx = COLS - 5; hx >= 1; hx--) {
+        if (![0, 1, 2, 3].some(i => isPlayer(hx + i, y) || (blockedFn && blockedFn(hx + i, y)))) {
           this.snake.reset(hx, y, { x: -1, y: 0 }, 4);
           this.acc = 0;
           this.dead = false;
@@ -68,7 +86,6 @@ class Rival {
         }
       }
     }
-    // Last resort: mirrored start row
     this.snake.reset(COLS - 5, clamp(Math.floor(R / 2), 1, R - 2), { x: -1, y: 0 }, 4);
     this.acc = 0;
     this.dead = false;
@@ -121,8 +138,9 @@ class Rival {
     seen.fill(0);
     prev.fill(-1);
 
-    // Own body (tail cell vacates each step)
-    for (let i = 0; i < s.cells.length - 1; i++) {
+    // Own body (tail cell vacates each step only when not growing)
+    const ownBodyLimit = (s.growPending || 0) > 0 ? s.cells.length : s.cells.length - 1;
+    for (let i = 0; i < ownBodyLimit; i++) {
       blocked[idx(s.cells[i].x, s.cells[i].y)] = 1;
     }
     // The player's whole body is lethal terrain
@@ -183,7 +201,26 @@ class Rival {
       dir = this.tailChaseDir(blocked, seen, prev, start, W, R, wrap);
     }
     if (!dir) dir = this.greedyDir(blocked, W, R, env.target, wrap);
-    if (!dir) dir = s.dir;
+
+    if (!dir) {
+      const fx = wrap ? (s.head.x + s.dir.x + W) % W : s.head.x + s.dir.x;
+      const fy = wrap ? (s.head.y + s.dir.y + R) % R : s.head.y + s.dir.y;
+      const selfCollides = (s.growPending || 0) > 0
+        ? s.isOccupied(fx, fy)
+        : s.cells.slice(0, -1).some(c => c.x === fx && c.y === fy);
+      if (selfCollides) {
+        const turns = [{ x: s.dir.y, y: -s.dir.x }, { x: -s.dir.y, y: s.dir.x }];
+        for (const d of turns) {
+          const nx = wrap ? (s.head.x + d.x + W) % W : s.head.x + d.x;
+          const ny = wrap ? (s.head.y + d.y + R) % R : s.head.y + d.y;
+          if (nx >= 0 && nx < W && ny >= 0 && ny < R && !s.isOccupied(nx, ny)) {
+            dir = d;
+            break;
+          }
+        }
+      }
+      if (!dir) dir = s.dir;
+    }
     s.dir = dir;
     return s.step({
       wrap,
@@ -217,7 +254,9 @@ class Rival {
       if (nx < 0 || ny < 0 || nx >= W || ny >= R) continue;
       const ni = ny * W + nx;
       if (blocked[ni] || prev[ni] === -1) continue;   // wall or unreachable
-      const manh = Math.abs(nx - tail.x) + Math.abs(ny - tail.y);
+      const dx = Math.abs(nx - tail.x);
+      const dy = Math.abs(ny - tail.y);
+      const manh = wrap ? Math.min(dx, W - dx) + Math.min(dy, R - dy) : dx + dy;
       // Tie-breaker: prefer moves that keep access to open space
       const space = this.floodFillSize(nx, ny, blocked, W, R, wrap);
       const score = manh - Math.min(space, s.cells.length * 2) * 0.25;
@@ -278,7 +317,9 @@ class Rival {
       const ny = wrap ? (s.head.y + d.y + R) % R : s.head.y + d.y;
       if (nx < 0 || ny < 0 || nx >= W || ny >= R) continue;
       if (blocked[ny * W + nx]) continue;
-      const dist = target ? Math.abs(target.gx - nx) + Math.abs(target.gy - ny) : 0;
+      const dx = Math.abs((target ? target.gx : 0) - nx);
+      const dy = Math.abs((target ? target.gy : 0) - ny);
+      const dist = target ? (wrap ? Math.min(dx, W - dx) + Math.min(dy, R - dy) : dx + dy) : 0;
       const score = dist + (d === turns[0] ? -0.4 : 0) + Math.random() * 0.35;
       if (score < bestScore) {
         bestScore = score;
@@ -288,9 +329,12 @@ class Rival {
     return best;
   }
 
-  tick(dt, target) {
+  tick(dt, target, wrap = false, W = 20, R = 20) {
     const h = this.snake.head;
-    const near = target && Math.abs(target.gx - h.x) + Math.abs(target.gy - h.y) < 3;
+    const dx = target ? Math.abs(target.gx - h.x) : 999;
+    const dy = target ? Math.abs(target.gy - h.y) : 999;
+    const dist = wrap ? Math.min(dx, W - dx) + Math.min(dy, R - dy) : dx + dy;
+    const near = target && dist < 3;
     this.snake.tick(dt, near ? 1 : 0);
   }
 

@@ -63,7 +63,7 @@ class Obstacles {
   }
 
   _bakeRocks(view) {
-    this._rockKey = view.cell + '_' + view.dpr + '_' + this._ver;
+    this._rockKey = view.cell + '_' + view.rows + '_' + view.dpr + '_' + this._ver;
     if (!this.rocks.length) {
       this._rockCv = null;
       return;
@@ -170,7 +170,7 @@ class Obstacles {
 
   render(ctx, view, time) {
     const cell = view.cell;
-    const key = view.cell + '_' + view.dpr + '_' + this._ver;
+    const key = view.cell + '_' + view.rows + '_' + view.dpr + '_' + this._ver;
     if (this._rockKey !== key) this._bakeRocks(view);
     if (this.rocks.length && this._rockCv) {
       ctx.drawImage(this._rockCv, 0, 0, view.w, view.h);

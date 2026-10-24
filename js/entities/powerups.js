@@ -28,8 +28,12 @@ class PowerUpManager {
     return this.field.some(p => p.gx === x && p.gy === y);
   }
 
-  spawn(isFree, forceType) {
+  spawn(isFree, forceType, allowedTypes) {
     if (this.field.length >= 2) return;
+    const pool = Array.isArray(forceType)
+      ? forceType
+      : (Array.isArray(allowedTypes) && allowedTypes.length ? allowedTypes : TYPES);
+    const pickType = () => (typeof forceType === 'string' ? forceType : pick(pool));
     const m = CONFIG.spawnMargin || 0;
     const x0 = Math.min(m, COLS - 1);
     const x1 = Math.max(x0, COLS - 1 - m);
@@ -41,7 +45,7 @@ class PowerUpManager {
       const y = randi(y0, y1);
       if (!isFree(x, y)) continue;
       if (this.occupied(x, y)) continue;
-      this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      this.field.push({ type: pickType(), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
       return;
     }
     for (let i = 0; i < 30; i++) {
@@ -49,7 +53,7 @@ class PowerUpManager {
       const y = randi(0, R - 1);
       if (!isFree(x, y)) continue;
       if (this.occupied(x, y)) continue;
-      this.field.push({ type: forceType ?? pick(TYPES), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      this.field.push({ type: pickType(), gx: x, gy: y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
       return;
     }
     const freeCells = [];
@@ -67,7 +71,7 @@ class PowerUpManager {
     }
     if (freeCells.length) {
       const c = pick(freeCells);
-      this.field.push({ type: forceType ?? pick(TYPES), gx: c.x, gy: c.y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
+      this.field.push({ type: pickType(), gx: c.x, gy: c.y, age: rand(0, 2000), life: CONFIG.powerupLifeMs });
     }
   }
 

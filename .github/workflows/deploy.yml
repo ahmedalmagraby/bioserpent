@@ -1,7 +1,10 @@
-name: Deploy to GitHub Pages
+name: Test & Deploy to GitHub Pages
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -18,7 +21,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    name: Run Automated E2E Test Suite (Tiers 1-7)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Execute Automated Test Harness
+        run: node tests/run-all-tests.js
+
   deploy:
+    name: Deploy to GitHub Pages
+    needs: test
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -30,6 +49,8 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Prepare production artifact
+        run: rm -rf tests .github
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -41,7 +41,7 @@ class InputManager {
     this._pd = e => this.onPointerDown(e);
     this._pm = e => this.onPointerMove(e);
     this._pu = e => this.onPointerUp(e);
-    this._blur = () => { this.h.onBurst(false); this.resetPad(); };
+    this._blur = () => { this.resetTouchState(); };
     this._ctx = e => e.preventDefault();
     // --- Gamepad state ---
     this.padIndex = null;        // gamepad index claimed as the active pad
@@ -50,6 +50,19 @@ class InputManager {
     this._padStart = false;      // Start button edge state
     this._padA = false;          // A button edge state (confirm)
     this.STICK_THRESHOLD = 0.55;
+  }
+
+  resetTouchState() {
+    this._swipe = null;
+    this._joyId = null;
+    this._joyLastDir = null;
+    this._burstId = null;
+    this._dpDirId = null;
+    this._dpBurstId = null;
+    this.hideJoy();
+    this.resetPad();
+    if (this.h.onBurst) this.h.onBurst(false);
+    this.setBurstVisual(false);
   }
 
   resetPad() {
@@ -82,6 +95,8 @@ class InputManager {
     window.addEventListener('keydown', this._kd);
     window.addEventListener('keyup', this._ku);
     window.addEventListener('blur', this._blur);
+    window.addEventListener('pointerup', this._pu);
+    window.addEventListener('pointercancel', this._pu);
     this._gc = e => this.onGamepadConnected(e);
     this._gd = e => this.onGamepadDisconnected(e);
     window.addEventListener('gamepadconnected', this._gc);
@@ -97,6 +112,8 @@ class InputManager {
     window.removeEventListener('keydown', this._kd);
     window.removeEventListener('keyup', this._ku);
     window.removeEventListener('blur', this._blur);
+    window.removeEventListener('pointerup', this._pu);
+    window.removeEventListener('pointercancel', this._pu);
     window.removeEventListener('gamepadconnected', this._gc);
     window.removeEventListener('gamepaddisconnected', this._gd);
     this.stage.removeEventListener('pointerdown', this._pd);
@@ -199,7 +216,7 @@ class InputManager {
       return;
     }
     const t = e.target;
-    if (t && t.closest && t.closest('input, select, textarea, button, a')) return;
+    if (t && t.closest && t.closest('input, select, textarea')) return;
     if (e.code === 'KeyM') {
       if (!e.repeat && this.h.onMute) this.h.onMute();
       return;
@@ -221,9 +238,17 @@ class InputManager {
       e.preventDefault();
       return;
     }
-    if (e.code === 'Space' || e.code === 'KeyP') {
-      if (!e.repeat) this.h.onPause();
+    if (e.code === 'Space') {
       e.preventDefault();
+      if (!e.repeat) {
+        if (this.h.onSpace) this.h.onSpace();
+        else this.h.onPause();
+      }
+      return;
+    }
+    if (e.code === 'KeyP') {
+      e.preventDefault();
+      if (!e.repeat) this.h.onPause();
       return;
     }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {

@@ -10,16 +10,17 @@
 
 ## ✨ Features
 
-- **Fluid Biomimetic Motion**: Smooth procedural spine inverse-kinematics and organic curves instead of rigid grid blocks.
+- **Fluid Biomimetic Motion**: Smooth procedural spine inverse-kinematics and organic curves instead of rigid grid blocks, with seamless multi-strand portal traversal and toroidal edge wrapping.
 - **Multiple Game Modes**:
-  - 🐍 **Classic Run**: Progressive speed curves, biome transitions, combo multipliers, and high score tracking.
-  - ⏳ **Time Attack**: Fast-paced score sprint under a strict timer with combo time extensions.
-  - 🪷 **Zen Flow**: Relaxing, peaceful garden wandering with tail ghosting and wall wrap.
-  - 🗺️ **Campaign Garden**: 12 hand-crafted obstacle courses across 4 biomes with 3-star scoring benchmarks.
+  - 🐍 **Classic Run**: Progressive speed curves, biome transitions, combo multipliers, optional AI Rival, and high score tracking.
+  - ⏳ **Time Attack**: Fast-paced score sprint under a strict timer with prey and egg time extensions.
+  - 🪷 **Zen Flow**: Relaxing, peaceful garden wandering with tail ghosting, wall wrap, and curated flow power-ups (Magnet, Slow-Mo, and 2× Multiplier).
+  - 📅 **Daily Challenge**: Seeded daily modifier combinations (Sun-Baked Haste, Giant Appetite, Portal Edges, Spectral Body, Insect Frenzy) with daily streak tracking.
+  - 🗺️ **Campaign Garden**: 12 hand-crafted obstacle courses across 4 biomes with 3-star scoring benchmarks and linked warp portals.
 - **Organic Ecosystem & Prey**:
-  - Red Apples, Golden Berries, Chasing Beetles, Bioluminescent Fireflies, and Evasive Dragonflies.
+  - Red Apples, Golden Berries, Rare Serpent Eggs (catch for high combo-multiplied points + magnet burst, or let hatch into a Golden Berry), Chasing Beetles, Bioluminescent Fireflies, and Evasive Dragonflies.
 - **Dynamic Power-ups**:
-  - Magnet Spores, Slow-Mo Amber, Ghost Phase, 2× Multipliers, and Prune Shrooms.
+  - Magnet Spores, Slow-Mo Amber, Ghost Phase (phases through walls, obstacles, own body, and Rival serpent), 2× Multipliers, and Prune Shrooms.
 - **Rich Visuals & Biomes**:
   - Emerald Rainforest, Golden Oasis, Bioluminescent Cavern, and Abyssal Reef.
   - 7 Unlockable serpent species (Emerald Python, Coral Serpent, Golden Sun Dragon, Abyssal Biolume, Albino Royal, Cosmic Aurora, Crimson Dragon).
@@ -35,7 +36,7 @@
   - Adaptive pace (~1.15× your current speed), growth parity, size cap, distinct violet banded skin.
   - Crash it for +25 points — it dissolves with a sting and respawns to keep the run competitive.
 - **Quality of Life**:
-  - Auto-pause on tab/window blur, gamepad support, PWA offline play, adaptive mobile board.
+  - Auto-pause on tab/window blur, JSON save export/import, gamepad support, PWA offline play, adaptive mobile board.
 - **Performance**:
   - Per-biome background caching (LRU of 4 baked canvases) — biome switches and resizes swap a cached canvas instead of repainting; checkerboard grid drawn as a single pattern tile.
 
@@ -48,7 +49,8 @@
 | **Steer** | Arrow Keys / `W`, `A`, `S`, `D` | Swipe / Floating Joystick / On-screen D-Pad | D-Pad / Left Stick |
 | **Speed Burst** | Hold `Shift` | Hold Burst Button (`⚡`) / Second Finger | Hold `A` / `B` / `RB` / `RT` |
 | **Pause / Resume** | `Space` / `P` / `Escape` | HUD Pause Button (`❚❚`) | `Start` (+) |
-| **Quick Restart** | `R` (on game over / pause / level complete) | Restart Button (`↻`) | `A` (on game over) |
+| **Quick Restart** | `Space` / `R` / `Enter` (on game over) · `R` (on pause / complete) | Restart Button (`↻`) | `A` (on game over) |
+| **Field Guide** | `H` / `?` | Guide Button (`📖`) | — |
 | **Toggle Mute** | `M` | Settings Modal Toggle | — |
 
 *Gamepad: any standard-layout controller (Xbox, PlayStation, etc.) — plug in and press a button to connect. The first active pad drives the game.*
@@ -57,18 +59,21 @@
 
 ## 🧪 Automated Testing
 
-BioSerpent includes a comprehensive 6-tier automated test harness covering core features, boundary invariants, cross-feature interactions, real-world workloads, adversarial stress tests, and audit remediations:
+BioSerpent includes a comprehensive 7-tier automated test harness (233 tests) covering core features, boundary invariants, cross-feature interactions, real-world workloads, adversarial stress tests, audit optimizations, and production-readiness regression checks:
 
 ```bash
 node tests/run-all-tests.js
 ```
 
-- **Tier 1**: Core Isolated Features (§R1, §R2, §R4)
-- **Tier 2**: Boundary & Corner Conditions (§R1, §R2)
-- **Tier 3**: Cross-Feature Combinations & Invariants
-- **Tier 4**: Real-World Workload Playthroughs
-- **Tier 5**: Adversarial Coverage Hardening Matrix
-- **Tier 6**: Audit Remediation & Optimization Matrix
+- **Tier 1**: Core Isolated Features (`tests/tier1-feature-tests.js` — 56 tests)
+- **Tier 2**: Boundary & Corner Conditions (`tests/tier2-boundary-tests.js` — 48 tests)
+- **Tier 3**: Cross-Feature Combinations & Invariants (`tests/tier3-cross-feature-tests.js` — 16 tests)
+- **Tier 4**: Real-World Workload Playthroughs (`tests/tier4-workload-tests.js` — 5 tests)
+- **Tier 5**: Adversarial Coverage Hardening Matrix (`tests/tier5-adversarial-hardening.js` — 53 tests)
+- **Tier 6**: Audit Remediation & Optimization Matrix (`tests/tier6-audit-remediation-tests.js` — 26 tests)
+- **Tier 7**: Production Readiness & Bug Regression Matrix (`tests/tier7-production-readiness-tests.js` — 29 tests)
+
+The GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically runs the full 7-tier test suite on every push and pull request before deploying to GitHub Pages.
 
 ---
 
@@ -104,7 +109,7 @@ Then navigate to `http://localhost:8080` in your web browser.
 
 ### Editing files
 
-There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=31`, matching the service worker's `bioserpent-v31` cache) so browsers pick up the new version.
+There is no build step; scripts are loaded in dependency order from `index.html`. When you change any file, bump the `?v=N` cache-buster on its `<script>`/`<link>` tag (currently `?v=32`, matching the service worker's `bioserpent-v32` cache) so browsers pick up the new version.
 
 ---
 

@@ -88,6 +88,9 @@ class UIManager {
       over: this.$('screen-over'),
       complete: this.$('screen-complete')
     };
+    this._levelFilter = 'all';
+    this._skinFilter = 'all';
+    this._badgeFilter = 'all';
     this.chips = new Map();
     this._wire(this.$('btnClassic'), () => this.h.onClassic());
     this._wire(this.$('btnLevels'), () => this.h.onLevels());
@@ -154,9 +157,10 @@ class UIManager {
     document.querySelectorAll('#levelBiomeTabs .filter-tab').forEach(tabBtn => {
       tabBtn.addEventListener('click', () => {
         this.h.onClick();
+        this._levelFilter = tabBtn.dataset.biome || 'all';
         document.querySelectorAll('#levelBiomeTabs .filter-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
         if (this._lastLevelsArgs) {
-          this.buildLevels(this._lastLevelsArgs[0], this._lastLevelsArgs[1], this._lastLevelsArgs[2], this._lastLevelsArgs[3], tabBtn.dataset.biome);
+          this.buildLevels(this._lastLevelsArgs[0], this._lastLevelsArgs[1], this._lastLevelsArgs[2], this._lastLevelsArgs[3], this._levelFilter);
         }
       });
     });
@@ -165,9 +169,10 @@ class UIManager {
     document.querySelectorAll('#skinFilterTabs .filter-tab').forEach(tabBtn => {
       tabBtn.addEventListener('click', () => {
         this.h.onClick();
+        this._skinFilter = tabBtn.dataset.filter || 'all';
         document.querySelectorAll('#skinFilterTabs .filter-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
         if (this._lastSkinsArgs) {
-          this.buildSkins(this._lastSkinsArgs[0], this._lastSkinsArgs[1], this._lastSkinsArgs[2], tabBtn.dataset.filter);
+          this.buildSkins(this._lastSkinsArgs[0], this._lastSkinsArgs[1], this._lastSkinsArgs[2], this._skinFilter);
         }
       });
     });
@@ -176,9 +181,10 @@ class UIManager {
     document.querySelectorAll('#badgeFilterTabs .filter-tab').forEach(tabBtn => {
       tabBtn.addEventListener('click', () => {
         this.h.onClick();
+        this._badgeFilter = tabBtn.dataset.filter || 'all';
         document.querySelectorAll('#badgeFilterTabs .filter-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
         if (this._lastBadgesArgs) {
-          this.buildBadges(this._lastBadgesArgs[0], this._lastBadgesArgs[1], this._lastBadgesArgs[2], tabBtn.dataset.filter);
+          this.buildBadges(this._lastBadgesArgs[0], this._lastBadgesArgs[1], this._lastBadgesArgs[2], this._badgeFilter);
         }
       });
     });
@@ -298,8 +304,10 @@ class UIManager {
     this._resetArmed = false;
     clearTimeout(this._resetTimer);
     const b = this.$('btnResetProgress');
-    b.textContent = 'Reset progress';
-    b.classList.remove('armed');
+    if (b) {
+      b.textContent = 'Reset All Progress';
+      b.classList.remove('armed');
+    }
   }
 
   _getFocusable(container) {
@@ -376,6 +384,9 @@ class UIManager {
     return Object.keys(this.screens).some(k => k !== 'menu' && !this.screens[k].classList.contains('hidden'));
   }
 
+  hideHUD() { this.setHUD(false); }
+  showHUD() { this.setHUD(true); }
+
   setHUD(vis) {
     this.el.hud.classList.toggle('hidden', !vis);
     if (!vis) {
@@ -404,16 +415,20 @@ class UIManager {
     if (d.stats !== undefined) this.setStats(d.stats);
     if (d.combo !== undefined) {
       if (d.combo) {
+        const prevCombo = this.el.combo.textContent;
         this.el.combo.textContent = d.combo;
         this.el.combo.classList.remove('vis-hidden', 'hidden');
-        if (this.el.combo.classList.contains('pulse')) {
-          this.el.combo.classList.remove('pulse');
-          this.el.combo.classList.add('pulse-alt');
-        } else {
-          this.el.combo.classList.remove('pulse-alt');
-          this.el.combo.classList.add('pulse');
+        if (prevCombo !== d.combo) {
+          if (this.el.combo.classList.contains('pulse')) {
+            this.el.combo.classList.remove('pulse');
+            this.el.combo.classList.add('pulse-alt');
+          } else {
+            this.el.combo.classList.remove('pulse-alt');
+            this.el.combo.classList.add('pulse');
+          }
         }
       } else {
+        this.el.combo.textContent = '';
         this.el.combo.classList.remove('pulse', 'pulse-alt', 'hidden');
         this.el.combo.classList.add('vis-hidden');
       }
@@ -476,9 +491,12 @@ class UIManager {
     setTimeout(() => t.remove(), 4000);
   }
 
-  buildLevels(levels, isUnlocked, starsFor, bestFor, filterBiome = 'all') {
+  buildLevels(levels, isUnlocked, starsFor, bestFor, filterBiome) {
+    if (filterBiome !== undefined) this._levelFilter = filterBiome;
+    else filterBiome = this._levelFilter || 'all';
     this._lastLevelsArgs = [levels, isUnlocked, starsFor, bestFor];
     this.el.levelGrid.innerHTML = '';
+    document.querySelectorAll('#levelBiomeTabs .filter-tab').forEach(b => b.classList.toggle('active', (b.dataset.biome || 'all') === filterBiome));
 
     const totalStarsEarned = levels.reduce((sum, _, i) => sum + starsFor(i), 0);
     const maxStars = levels.length * 3;
@@ -536,9 +554,12 @@ class UIManager {
     });
   }
 
-  buildBadges(defs, isEarned, save, filterType = 'all') {
+  buildBadges(defs, isEarned, save, filterType) {
+    if (filterType !== undefined) this._badgeFilter = filterType;
+    else filterType = this._badgeFilter || 'all';
     this._lastBadgesArgs = [defs, isEarned, save];
     this.el.badgeGrid.innerHTML = '';
+    document.querySelectorAll('#badgeFilterTabs .filter-tab').forEach(b => b.classList.toggle('active', (b.dataset.filter || 'all') === filterType));
     const earnedCount = defs.filter(d => isEarned(d.id)).length;
     const pct = Math.round((earnedCount / defs.length) * 100);
 
@@ -580,9 +601,12 @@ class UIManager {
     }
   }
 
-  buildSkins(isUnlocked, currentId, save, filterType = 'all') {
+  buildSkins(isUnlocked, currentId, save, filterType) {
+    if (filterType !== undefined) this._skinFilter = filterType;
+    else filterType = this._skinFilter || 'all';
     this._lastSkinsArgs = [isUnlocked, currentId, save];
     this.el.skinGrid.innerHTML = '';
+    document.querySelectorAll('#skinFilterTabs .filter-tab').forEach(b => b.classList.toggle('active', (b.dataset.filter || 'all') === filterType));
 
     const curSkin = SKINS.find(s => s.id === currentId) || SKINS[0];
     if (this.el.skinHeroCanvas && curSkin) drawSkinPreview(this.el.skinHeroCanvas, curSkin);
@@ -718,8 +742,11 @@ class UIManager {
   }
 
   setBurstActive(active) {
-    const btn = document.getElementById('btnBurst');
-    if (btn) btn.classList.toggle('active', !!active);
+    const btn = document.getElementById('dpBurst') || document.getElementById('btnBurst');
+    if (btn) {
+      btn.classList.toggle('held', !!active);
+      btn.classList.toggle('active', !!active);
+    }
   }
 
   gameOver(d) {
@@ -883,6 +910,7 @@ class UIManager {
   }
 
   closeSettingsModal() {
+    this._disarmReset();
     this._closeModal(this.$('modal-settings'));
   }
 

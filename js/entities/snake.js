@@ -285,7 +285,10 @@ class Snake {
 
   headPos(view, t) {
     const p0 = this.path[0];
-    const p1 = this.path[1] && !this.path[1].cut ? this.path[1] : null;
+    if (p0 && p0.cut) {
+      return { px: view.cx(p0.x), py: view.cy(p0.y) };
+    }
+    const p1 = this.path[1] || null;
     const x = p1 ? lerp(p1.x, p0.x, t) : p0.x;
     const y = p1 ? lerp(p1.y, p0.y, t) : p0.y;
     return { px: view.cx(x), py: view.cy(y) };
@@ -296,14 +299,14 @@ class Snake {
     const p1 = this.path[1];
     let hx;
     let hy;
-    if (!p1 || p1.cut) {
+    if (!p1 || (p0 && p0.cut)) {
       hx = p0.x; hy = p0.y;
     } else {
       hx = lerp(p1.x, p0.x, t);
       hy = lerp(p1.y, p0.y, t);
     }
     const total = this.cells.length;
-    const raw = [{ x: hx, y: hy }];
+    const raw = [{ x: hx, y: hy, cut: !!(p0 && p0.cut) }];
     for (let i = 1; i < this.path.length; i++) raw.push(this.path[i]);
     const strands = [];
     let cur = [{ px: view.cx(hx), py: view.cy(hy) }];
@@ -312,11 +315,11 @@ class Snake {
     for (let i = 1; i < raw.length; i++) {
       const a = raw[i - 1];
       const b = raw[i];
-      if (b.cut || a.cut) {
-        cur.push({ px: view.cx(b.x), py: view.cy(b.y) });
-        strands.push(cur);
-        cur = [];
+      if (a.cut) {
+        if (cur.length > 0) strands.push(cur);
+        cur = [{ px: view.cx(b.x), py: view.cy(b.y) }];
         acc += 1;
+        next += 1;
         continue;
       }
       const dx = b.x - a.x;
@@ -399,11 +402,19 @@ class Snake {
     const headR = cell * 0.74 * 0.64 * (1 + this.pulse * 0.22);
     const hx = hp[0].px + Math.cos(ang) * cell * 0.14;
     const hy = hp[0].py + Math.sin(ang) * cell * 0.14;
+    const w = view.w;
+    const h = view.h;
+    const lookHx = w ? ((hx % w) + w) % w : hx;
+    const lookHy = h ? ((hy % h) + h) % h : hy;
     let pdx = 0;
     let pdy = 0;
     if (state.lookX !== undefined && state.lookX !== null) {
-      const dx = state.lookX - hx;
-      const dy = state.lookY - hy;
+      let dx = state.lookX - lookHx;
+      let dy = state.lookY - lookHy;
+      if (w && h) {
+        if (Math.abs(dx) > w / 2) dx -= Math.sign(dx) * w;
+        if (Math.abs(dy) > h / 2) dy -= Math.sign(dy) * h;
+      }
       const m = Math.hypot(dx, dy) || 1;
       pdx = dx / m;
       pdy = dy / m;

@@ -16,7 +16,7 @@ function defaultSave() {
     levelBest: {},
     stars: {},
     settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true, rival: false },
-    daily: { key: '', best: 0, streak: 0, lastPlayed: '' },
+    daily: { key: '', best: 0, streak: 0, lastPlayed: '', countedKey: '' },
     history: {},
     skin: 'emerald',
     seenHint: false,
@@ -62,7 +62,8 @@ function sanitizeSave(s, d) {
     key: typeof s.daily?.key === 'string' ? s.daily.key : d.daily.key,
     best: num(s.daily?.best, d.daily.best),
     streak: num(s.daily?.streak, d.daily.streak),
-    lastPlayed: typeof s.daily?.lastPlayed === 'string' ? s.daily.lastPlayed : d.daily.lastPlayed
+    lastPlayed: typeof s.daily?.lastPlayed === 'string' ? s.daily.lastPlayed : d.daily.lastPlayed,
+    countedKey: typeof s.daily?.countedKey === 'string' ? s.daily.countedKey : (d.daily?.countedKey || '')
   };
   const history = {};
   if (s.history && typeof s.history === 'object') {
@@ -279,8 +280,11 @@ class Game {
     for (let i = 0; i < 100; i++) {
       const x = randi(m, COLS - 1 - m);
       const y = randi(m, liveRows() - 1 - m);
-      if (!this.demoFood.occupied(x, y) && Math.abs(this.demoSnake.head.x - x) + Math.abs(this.demoSnake.head.y - y) >= 4) {
+      if (!this.demoFood.occupied(x, y) && !this.demoSnake.isOccupied(x, y) && Math.abs(this.demoSnake.head.x - x) + Math.abs(this.demoSnake.head.y - y) >= 4) {
         this.demoFood.items.push({ type: 'apple', gx: x, gy: y, age: 0, hop: 0 });
+        this.demoFood._occAdd(x, y);
+        this.demoFood._ver++;
+        this.demoFood._itemCount = this.demoFood.items.length;
         return;
       }
     }
@@ -303,7 +307,8 @@ class Game {
     }
     const blocked = _demoBlocked;
     blocked.fill(0, 0, size);
-    for (let i = 0; i < s.cells.length - 1; i++) { // tail cell vacates each step
+    const demoLimit = (s.growPending || 0) > 0 ? s.cells.length : s.cells.length - 1;
+    for (let i = 0; i < demoLimit; i++) {
       blocked[s.cells[i].y * W + s.cells[i].x] = 1;
     }
     const start = s.head.y * W + s.head.x;
@@ -408,8 +413,11 @@ class Game {
           const nx = (s.head.x + d.x + COLS) % COLS;
           const R = liveRows();
           const ny = (s.head.y + d.y + R) % R;
-          if (s.cells.some((c, i) => i < s.cells.length - 1 && c.x === nx && c.y === ny)) continue;
-          const dist = apple ? Math.abs(apple.gx - nx) + Math.abs(apple.gy - ny) : 0;
+          const demoLimit = (s.growPending || 0) > 0 ? s.cells.length : s.cells.length - 1;
+          if (s.cells.some((c, i) => i < demoLimit && c.x === nx && c.y === ny)) continue;
+          const dx = apple ? Math.abs(apple.gx - nx) : 0;
+          const dy = apple ? Math.abs(apple.gy - ny) : 0;
+          const dist = apple ? Math.min(dx, COLS - dx) + Math.min(dy, R - dy) : 0;
           const score = dist + (d === turns[0] ? -0.4 : 0) + Math.random() * 0.35;
           if (score < bestScore) {
             bestScore = score;
@@ -494,6 +502,19 @@ class Game {
     if (this.powerups && this.powerups.occupied && this.powerups.occupied(x, y)) return false;
     const h = this.snake.head;
     if (h && Math.abs(h.x - x) + Math.abs(h.y - y) < 3) return false;
+    // Prevent spawning inside 1-tile bottleneck dead-end pockets
+    let passableNeighbors = 0;
+    if (this.isPassableCell(x - 1, y)) passableNeighbors++;
+    if (this.isPassableCell(x + 1, y)) passableNeighbors++;
+    if (this.isPassableCell(x, y - 1)) passableNeighbors++;
+    if (this.isPassableCell(x, y + 1)) passableNeighbors++;
+    if (passableNeighbors < 2) return false;
+    // Campaign Level 5 (Oasis Rings) wells interior protection
+    if (this.mode === 'level' && this.levelIdx === 4) {
+      if ((x >= 8 && x <= 9 && y >= 3 && y <= 5) || (x >= 12 && x <= 13 && y >= 14 && y <= 15)) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -702,23 +723,34 @@ class Game {
     if (this.obstacles && this.obstacles._rebuildGrid) {
       this.obstacles._rebuildGrid(COLS, R);
     }
-    if (this.snake && this.snake.cells && (this.state === 'playing' || this.state === 'countdown')) {
+    const inGame = this.state === 'playing' || this.state === 'countdown' || this.state === 'paused';
+    if (this.snake && this.snake.cells && inGame) {
       let moved = false;
       for (const c of this.snake.cells) {
         if (c.y >= R) { c.y = R - 1; moved = true; }
         if (c.x >= COLS) { c.x = COLS - 1; moved = true; }
       }
-      if (moved && this.snake.rebuildOcc) this.snake.rebuildOcc();
+      if (moved || (this.snake.cY >= R) || (this.snake.cX >= COLS)) {
+        this.snake.cX = this.snake.cells[0].x;
+        this.snake.cY = this.snake.cells[0].y;
+        this.snake.path = this.snake.cells.map(c => ({ x: c.x, y: c.y }));
+        if (this.snake.rebuildOcc) this.snake.rebuildOcc();
+      }
     }
-    if (this.rival && this.rival.snake && this.rival.snake.cells && (this.state === 'playing' || this.state === 'countdown')) {
+    if (this.rival && this.rival.snake && this.rival.snake.cells && inGame) {
       let moved = false;
       for (const c of this.rival.snake.cells) {
         if (c.y >= R) { c.y = R - 1; moved = true; }
         if (c.x >= COLS) { c.x = COLS - 1; moved = true; }
       }
-      if (moved && this.rival.snake.rebuildOcc) this.rival.snake.rebuildOcc();
+      if (moved || (this.rival.snake.cY >= R) || (this.rival.snake.cX >= COLS)) {
+        this.rival.snake.cX = this.rival.snake.cells[0].x;
+        this.rival.snake.cY = this.rival.snake.cells[0].y;
+        this.rival.snake.path = this.rival.snake.cells.map(c => ({ x: c.x, y: c.y }));
+        if (this.rival.snake.rebuildOcc) this.rival.snake.rebuildOcc();
+      }
     }
-    if (this.food && (this.state === 'playing' || this.state === 'countdown')) {
+    if (this.food && inGame) {
       for (let i = this.food.items.length - 1; i >= 0; i--) {
         const it = this.food.items[i];
         if (it.gy >= R || it.gx >= COLS || it.gy < 0 || it.gx < 0) {
@@ -742,7 +774,7 @@ class Game {
         this.food.spawnApple((x, y) => this.isFreeCell(x, y));
       }
     }
-    if (this.powerups && (this.state === 'playing' || this.state === 'countdown')) {
+    if (this.powerups && inGame) {
       for (let i = this.powerups.field.length - 1; i >= 0; i--) {
         const p = this.powerups.field[i];
         if (p.gy >= R || p.gx >= COLS || p.gy < 0 || p.gx < 0) {
@@ -775,13 +807,13 @@ class Game {
   }
 
   startRun(mode, levelIdx = -1) {
-    const wasDailyActive = this.mode === 'daily' && this.run &&
-      (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown');
+    const wasDailyActive = this.mode === 'daily' && this.run && this.run.started &&
+      (this.state === 'playing' || this.state === 'paused');
     if (wasDailyActive) {
       this.recordDailyScore();
     }
-    const wasZenActive = this.mode === 'zen' && this.run &&
-      (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown');
+    const wasZenActive = this.mode === 'zen' && this.run && this.run.started &&
+      (this.state === 'playing' || this.state === 'paused');
     if (wasZenActive) {
       this.persistZenBest();
     }
@@ -852,7 +884,7 @@ class Game {
     this.acc = 0;
     this.tInterp = 0;
     this.burst = false;
-    this.run = { score: 0, apples: 0, golden: 0, foodEaten: 0, insects: 0, powerups: 0, lengthMax: this.snake.length, pacifist: true, time: 0 };
+    this.run = { score: 0, apples: 0, golden: 0, foodEaten: 0, insects: 0, powerups: 0, lengthMax: this.snake.length, pacifist: true, time: 0, started: false };
     this.combo = 0;
     this.comboTimer = 0;
     this.taTime = mode === 'timeattack' ? CONFIG.taStartMs : 0;
@@ -882,7 +914,7 @@ class Game {
     // Rival serpent (Classic only, off by default — Settings toggle)
     if (mode === 'classic' && this.save.settings.rival) {
       this.rival = new Rival();
-      this.rival.reset(this.view, this.snake.cells, null, 6);
+      this.rival.reset(this.view, this.snake.cells, (x, y) => !this.isFreeCell(x, y), 6);
     } else {
       this.rival = null;
     }
@@ -904,7 +936,9 @@ class Game {
         : m === 'joystick' ? 'Drag the floating stick · second finger = speed burst'
         : m === 'swipe' ? 'Swipe anywhere to steer · second finger = speed burst'
         : 'Arrows / WASD steer · hold Shift for speed burst · Space pauses';
-      setTimeout(() => this.ui.toast('🎮 ' + tip, 'hint'), 300);
+      setTimeout(() => {
+        if (this._runId === runId) this.ui.toast('🎮 ' + tip, 'hint');
+      }, 300);
     }
     
     // 3-2-1 Countdown before action starts
@@ -920,10 +954,10 @@ class Game {
 
   gotoMenu() {
     this.ui.hideCountdown();
-    if (this.mode === 'daily' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
+    if (this.mode === 'daily' && this.run && this.run.started && (this.state === 'playing' || this.state === 'paused')) {
       this.recordDailyScore();
     }
-    if (this.mode === 'zen' && this.run && (this.state === 'playing' || this.state === 'paused' || this.state === 'countdown')) {
+    if (this.mode === 'zen' && this.run && this.run.started && (this.state === 'playing' || this.state === 'paused')) {
       this.persistZenBest(true);
     }
     this.state = 'menu';
@@ -976,9 +1010,10 @@ class Game {
 
   togglePause() {
     if (this.state === 'playing' || this.state === 'countdown') {
+      if (this.state === 'playing' && this.run) this.run.started = true;
       this._stateBeforePause = this.state;
       this.state = 'paused';
-      this.persistZenBest();
+      if (this.run && this.run.started) this.persistZenBest();
       this.ui.hideCountdown();
       this.burst = false;
       if (this._lastBurstI) {
@@ -1004,6 +1039,9 @@ class Game {
       } else {
         this.state = 'playing';
       }
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
       this.hudTimer = CONFIG.hudThrottleMs;
       this.ui.showScreen(null);
     }
@@ -1025,10 +1063,10 @@ class Game {
     // spawns whenever a Classic run exists or is starting — including from the
     // menu/pause/game-over paths, so the rival can never silently go missing.
     if (this.rival && !this.save.settings.rival) this.rival = null;
-    if (!this.rival && this.save.settings.rival && this.mode === 'classic'
-        && this.state !== 'menu') {
+    if (!this.rival && this._rivalRespawnIn <= 0 && this.save.settings.rival && this.mode === 'classic'
+        && (this.state === 'playing' || this.state === 'countdown' || this.state === 'paused')) {
       this.rival = new Rival();
-      this.rival.reset(this.view, this.snake.cells || [], null, 4);
+      this.rival.reset(this.view, this.snake.cells || [], (x, y) => !this.isFreeCell(x, y), 4);
     }
     if (this.state === 'playing' || this.state === 'countdown') {
       this.ui.setDpadVisible(this.input.mode === 'dpad');
@@ -1142,7 +1180,16 @@ class Game {
   }
 
   consumeEgg() {
-    const gain = CONFIG.gainsEgg;
+    this.combo = Math.min(CONFIG.comboMax, (this.comboTimer > 0 ? this.combo : 0) + 1);
+    this.comboTimer = CONFIG.comboMs;
+    this.run.maxCombo = Math.max(this.run.maxCombo || 0, this.combo);
+    this.save.stats.maxCombo = Math.max(this.save.stats.maxCombo || 0, this.combo);
+    if (this.combo > 1) {
+      this.save.stats.combos = Math.max(this.save.stats.combos || 0, this.combo);
+    }
+    const comboMult = this.combo > 1 ? 1 + (this.combo - 1) * CONFIG.comboStep : 1;
+    const mult = (this.effects.multi > 0 ? 2 : 1) * comboMult;
+    const gain = Math.round(CONFIG.gainsEgg * mult);
     this.run.score += gain;
     this.run.eggs = (this.run.eggs || 0) + 1;
     this.snake.grow(dailyModActive('giant') ? 4 : 2);
@@ -1158,6 +1205,9 @@ class Game {
     this.sound.golden(this._pan);
     buzz([14, 20, 14]);
     this._queueEat(hx, hy, burstOpts, gain, hx, hy - this.view.cell * 0.7, '#f2e9cf', 18);
+    if (this.mode === 'timeattack') {
+      this.taTime = Math.min(CONFIG.timeAttackMaxMs || 90000, this.taTime + (CONFIG.timeAttackBonusGoldenMs || CONFIG.taGoldenBonus || 4000));
+    }
     this.checkBadges();
     this.maybeNewBest();
   }
@@ -1236,6 +1286,8 @@ class Game {
     this.dissolving = true;
     this.burst = false;
     this._rivalRespawnIn = 0;
+    this.ui.hideCountdown();
+    this.updateHUDFrame(0, true);
     if (this._lastBurstI) {
       this._lastBurstI = 0;
       this.sound.setIntensity(0);
@@ -1265,12 +1317,16 @@ class Game {
     if (this.save.settings.flash !== false) this.particles.flash(fx.flash, cause === 'rock' ? 0.34 : 0.28);
     const dsp2 = this.snake.sampleSpine(this.view, this.tInterp);
     if (dsp2 && dsp2.all) {
+      const w = this.view.w;
+      const h = this.view.h;
       for (const strand of dsp2.all) {
         if (!strand) continue;
         for (let i = 0; i < strand.length; i += 3) {
           const pt = strand[i];
           if (pt && Number.isFinite(pt.px) && Number.isFinite(pt.py)) {
-            this.particles.burst(pt.px, pt.py, {
+            const px = ((pt.px % w) + w) % w;
+            const py = ((pt.py % h) + h) % h;
+            this.particles.burst(px, py, {
               count: 6, colors: [this.snake.skin.c1, this.snake.skin.c2, ...fx.burst],
               speed: 0.12, size: 2.4, life: 800, grav: 0.0004
             });
@@ -1288,6 +1344,8 @@ class Game {
     this.rival = null;
     if (this.run && this.mode === 'classic') {
       this.run.score += 25;
+      this.maybeNewBest();
+      this.checkBadges();
       buzz([15, 30, 15]);
       this.particles.popup(
         this.view.cx(r.snake.head.x),
@@ -1297,12 +1355,16 @@ class Game {
     }
     const rsp = r.snake.sampleSpine(this.view, r.tFrac);
     if (rsp && rsp.all) {
+      const w = this.view.w;
+      const h = this.view.h;
       for (const strand of rsp.all) {
         if (!strand) continue;
         for (let i = 0; i < strand.length; i += 3) {
           const pt = strand[i];
           if (pt && Number.isFinite(pt.px) && Number.isFinite(pt.py)) {
-            this.particles.burst(pt.px, pt.py, {
+            const px = ((pt.px % w) + w) % w;
+            const py = ((pt.py % h) + h) % h;
+            this.particles.burst(px, py, {
               count: 6, colors: ['#b388ff', '#f8bbd0', '#ffffff'],
               speed: 0.12, size: 2.4, life: 800, grav: 0.0004
             });
@@ -1337,8 +1399,9 @@ class Game {
     d.lastPlayed = today;
     const score = this.run ? this.run.score : 0;
     if (score > d.best) d.best = score;
-    if (this._dailyCountedDay !== today) {
+    if (d.countedKey !== today && this._dailyCountedDay !== today) {
       this.save.stats.dailyPlayed = (this.save.stats.dailyPlayed || 0) + 1;
+      d.countedKey = today;
       this._dailyCountedDay = today;
     }
     this.checkBadges();
@@ -1416,15 +1479,20 @@ class Game {
       history: (this.save.history && this.save.history[hkey]) || [],
       newBest
     };
+    this.ui.hideCountdown();
+    const currentRunId = this._runId;
     if (!gentle) {
+      this._overReady = false;
       setTimeout(() => {
-        if (this.state !== 'over') return;
+        if (this._runId !== currentRunId || this.state !== 'over') return;
+        this._overReady = true;
         if (this.sound && typeof this.sound.deathJingle === 'function') {
           this.sound.deathJingle();
         }
         this.ui.gameOver(rows);
       }, 700);
     } else {
+      this._overReady = true;
       if (this.sound && typeof this.sound.powerExpire === 'function') {
         this.sound.powerExpire();
       }
@@ -1436,6 +1504,8 @@ class Game {
     this.state = 'complete';
     this.burst = false;
     this._rivalRespawnIn = 0;
+    this.ui.hideCountdown();
+    this.updateHUDFrame(0, true);
     if (this._lastBurstI) {
       this._lastBurstI = 0;
       this.sound.setIntensity(0);
@@ -1460,16 +1530,17 @@ class Game {
     if (h.length > 10) h.shift();
     this.checkBadges();
     this.persist();
+    const currentRunId = this._runId;
     for (let i = 0; i < stars; i++) {
       setTimeout(() => {
-        if (this.state === 'complete') this.sound.star(i);
+        if (this._runId === currentRunId && this.state === 'complete') this.sound.star(i);
       }, 350 + i * 280);
     }
     const cx = this.view.w / 2;
     const cy = this.view.h / 2;
     for (let i = 0; i < 5; i++) {
       setTimeout(() => {
-        if (this.state === 'complete') {
+        if (this._runId === currentRunId && this.state === 'complete') {
           this.particles.burst(cx + rand(-100, 100), cy + rand(-60, 60), {
             count: 18, colors: ['#ffd54a', '#7ee08a', '#69b7ff', '#ff9ad5'],
             speed: 0.18, size: 2.6, life: 900, grav: 0.0003, type: 'spark'
@@ -1483,6 +1554,7 @@ class Game {
 
 
   doStep(dt = 16) {
+    if (this.run) this.run.started = true;
     const env = {
       wrap: this.mode === 'zen'
         || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
@@ -1510,6 +1582,17 @@ class Game {
       return;
     }
     const h = this.snake.head;
+    // Player head vs rival body/head — mutual destruction (skipped during Ghost Phase)
+    if (this.effects.ghost <= 0 && this.rival && this.rival.snake.isOccupied(h.x, h.y)) {
+      this.die('rival');
+      return;
+    }
+    // Consume any food items on head cell before magnet pull
+    let item;
+    while ((item = this.food.collideCell(h.x, h.y))) {
+      if (item.type === 'egg') this.consumeEgg();
+      else this.consume(item.type === 'apple' ? 'apple' : 'golden');
+    }
     if (this.effects.magnet > 0) {
       this.food.magnetPull(
         h,
@@ -1524,22 +1607,16 @@ class Game {
           }
         }
       );
-    }
-    const item = this.food.collideCell(h.x, h.y);
-    if (item) {
-      if (item.type === 'egg') this.consumeEgg();
-      else this.consume(item.type === 'apple' ? 'apple' : 'golden');
+      while ((item = this.food.collideCell(h.x, h.y))) {
+        if (item.type === 'egg') this.consumeEgg();
+        else this.consume(item.type === 'apple' ? 'apple' : 'golden');
+      }
     }
     const ins = this.food.insectHit(h.x, h.y);
     if (ins) this.consumeInsect(ins.kind);
     this._pan = (this.view.cx(h.x) / this.view.w) * 2 - 1;
     const pw = this.powerups.collide(h.x, h.y);
     if (pw) this.activatePower(pw.type);
-    // Player head vs rival body/head — mutual destruction
-    if (this.rival && this.rival.snake.isOccupied(h.x, h.y)) {
-      this.die('rival');
-      return;
-    }
     const newLen = this.snake.length;
     if (newLen !== this.lastLen) {
       if (this.milestone && newLen >= this.milestone) {
@@ -1562,7 +1639,7 @@ class Game {
       this.lastLen = newLen;
     }
     // Near-miss: skim past a hazard without touching it for bonus points
-    if (this._nearMissCd <= 0) {
+    if (this._nearMissCd <= 0 && this.effects.ghost <= 0) {
       const nd = this.obstacles.nearMissDistance(h.x, h.y);
       if (nd !== null && nd <= CONFIG.nearMissDist) {
         this._nearMissCd = CONFIG.nearMissCooldownMs;
@@ -1574,6 +1651,8 @@ class Game {
         const ny = this.view.cy(h.y);
         this.particles.popup(nx, ny - this.view.cell * 0.9, '+' + CONFIG.nearMissGain + ' close!', '#48dbfb', 14);
         this.particles.burst(nx, ny, { count: 6, colors: ['#48dbfb', '#ffffff'], speed: 0.1, size: 1.6, life: 350 });
+        this.maybeNewBest();
+        this.checkBadges();
       }
     }
     if (!this.food.items.some(i => i.type === 'apple' && i.gy < liveRows() && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
@@ -1600,9 +1679,9 @@ class Game {
     }
   }
 
-  updateHUDFrame(dt) {
+  updateHUDFrame(dt, force = false) {
     this.hudTimer += dt;
-    if (this.hudTimer < CONFIG.hudThrottleMs) return;
+    if (!force && this.hudTimer < CONFIG.hudThrottleMs) return;
     this.hudTimer = 0;
     let stats;
     if (this.mode === 'timeattack') {
@@ -1688,7 +1767,7 @@ class Game {
         this._rivalRespawnIn = 0;
         if (this._rivalPendingRespawnId === this._rivalRunId && this.mode === 'classic' && this.save.settings.rival) {
           this.rival = new Rival();
-          this.rival.reset(this.view, this.snake.cells || [], null, 6);
+          this.rival.reset(this.view, this.snake.cells || [], (x, y) => !this.isFreeCell(x, y), 6);
         }
       }
     }
@@ -1780,6 +1859,8 @@ class Game {
       }
       if (this.countdownTimer <= 0) {
         this.state = 'playing';
+        if (this.run) this.run.started = true;
+        this.burst = Boolean(this._burstHeld);
         setTimeout(() => {
           if (this.state === 'playing') this.ui.hideCountdown();
         }, 350);
@@ -1795,7 +1876,11 @@ class Game {
         if (flat && flat.length > 0) {
           const dp = flat[Math.floor(Math.random() * flat.length)];
           if (dp && Number.isFinite(dp.px) && Number.isFinite(dp.py)) {
-            this.particles.burst(dp.px, dp.py, {
+            const w = this.view.w;
+            const h = this.view.h;
+            const px = ((dp.px % w) + w) % w;
+            const py = ((dp.py % h) + h) % h;
+            this.particles.burst(px, py, {
               count: 2, colors: [this.snake.skin.c1, this.snake.skin.c2, '#ff8a80'],
               speed: 0.06, size: 2, life: 600
             });
@@ -1910,7 +1995,8 @@ class Game {
       this.food.trySpawnEgg((x, y) => this.isFreeCell(x, y), this.particles, this.view);
     }
     if (this.powerups.field.length === 0 && Math.random() < dt * CONFIG.powerupRatePerMs) {
-      this.powerups.spawn((x, y) => this.isFreeCell(x, y));
+      const allowedPowers = this.mode === 'zen' ? ['magnet', 'slow', 'multi'] : null;
+      this.powerups.spawn((x, y) => this.isFreeCell(x, y), null, allowedPowers);
       if (this.powerups.field.length) {
         const p = this.powerups.field[this.powerups.field.length - 1];
         const meta = POWERUP_META[p.type];
@@ -2000,7 +2086,9 @@ class Game {
     if (this.state === 'menu') {
       const dt2 = clamp(this.demoAcc / CONFIG.stepMs.demo, 0, 1);
       const dh = this.demoSnake.headPos(v, dt2);
-      const dnear = this.demoFood.getNearestItemPx(dh.px, dh.py, v.cell);
+      const dwx = ((dh.px % v.w) + v.w) % v.w;
+      const dwy = ((dh.py % v.h) + v.h) % v.h;
+      const dnear = this.demoFood.getNearestItemPx(dwx, dwy, v.cell);
       this.demoFood.render(ctx, v, this.time);
       this.demoSnake.render(ctx, v, dt2, this.time, {
         ghost: false,
@@ -2101,21 +2189,18 @@ const ui = new UIManager({
   onSelectSkin(id) {
     game.save.skin = id;
     game.persist();
-    ui.buildSkins(sid => game.isSkinUnlocked(sid), game.save.skin, game.save);
+    ui.buildSkins(sid => game.isSkinUnlocked(sid), game.save.skin, game.save, ui._skinFilter);
     game.refreshMenuStats();
     ui.toast(`🐍 Skin selected: <b>${SKINS.find(s => s.id === id).name}</b>`, 'hint');
   },
   onPauseButton() { game.togglePause(); },
   onResume() { game.togglePause(); },
   onRestart() {
-    if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
-      game.save.stats.games++;
-      game.save.stats.maxLength = Math.max(game.save.stats.maxLength, game.snake.length);
-      if (game.snake.length > game.save.best.zen) {
-        game.save.best.zen = game.snake.length;
-        game.persist();
-      }
-      game.checkBadges();
+    if (game.mode === 'daily' && game.run && game.run.started && (game.state === 'playing' || game.state === 'paused')) {
+      game.recordDailyScore();
+    }
+    if (game.mode === 'zen' && game.run && game.run.started && (game.state === 'playing' || game.state === 'paused')) {
+      game.persistZenBest(true);
     }
     game.startRun(game.mode, game.levelIdx);
   },
@@ -2125,6 +2210,14 @@ const ui = new UIManager({
     else game.gotoMenu();
   },
   onResetProgress() {
+    if (game.state !== 'menu') {
+      game._runId = (game._runId || 0) + 1;
+      game.state = 'menu';
+      game.run = null;
+      game.ui.setHUD(false);
+      game.ui.showScreen('menu');
+      game.resetDemo();
+    }
     game.save = defaultSave();
     game.persist();
     game.applySettings();
@@ -2182,6 +2275,14 @@ const ui = new UIManager({
     try {
       const obj = JSON.parse(txt);
       if (!obj || typeof obj !== 'object' || !obj.best || !obj.settings) throw new Error('shape');
+      if (game.state !== 'menu') {
+        game._runId = (game._runId || 0) + 1;
+        game.state = 'menu';
+        game.run = null;
+        game.ui.setHUD(false);
+        game.ui.showScreen('menu');
+        game.resetDemo();
+      }
       game.save = sanitizeSave(obj, defaultSave());
       game.persist();
       game.applySettings();
@@ -2202,7 +2303,26 @@ const input = new InputManager(stage, {
     if (game.state === 'playing' || game.state === 'countdown') game.snake.queueDir(DIRS[dir]);
   },
   onPause() {
-    if (game.state === 'playing' || game.state === 'paused') game.togglePause();
+    if (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown') {
+      game.togglePause();
+    } else if (game.state === 'over') {
+      if (game._overReady !== false) {
+        if (game.mode === 'zen' && game.run && game.run.started) game.persistZenBest(true);
+        ui.toast('↻ Restarted', 'hint');
+        game.startRun(game.mode, game.levelIdx);
+      }
+    }
+  },
+  onSpace() {
+    if (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown') {
+      game.togglePause();
+    } else if (game.state === 'over') {
+      if (game._overReady !== false) {
+        if (game.mode === 'zen' && game.run && game.run.started) game.persistZenBest(true);
+        ui.toast('↻ Restarted', 'hint');
+        game.startRun(game.mode, game.levelIdx);
+      }
+    }
   },
   onGuideKey() {
     if (ui.isGuideOpen()) {
@@ -2242,7 +2362,8 @@ const input = new InputManager(stage, {
   },
   onRestartKey() {
     if (game.state === 'over' || game.state === 'paused' || game.state === 'complete') {
-      if (game.mode === 'zen' && game.run && (game.state === 'paused' || game.state === 'playing')) {
+      if (game.state === 'over' && game._overReady === false) return;
+      if (game.mode === 'zen' && game.run && game.run.started && (game.state === 'paused' || game.state === 'playing')) {
         game.persistZenBest(true);
       }
       ui.toast('↻ Restarted', 'hint');
@@ -2254,7 +2375,9 @@ const input = new InputManager(stage, {
     if (game.state === 'menu') {
       if (!ui.isScreenOpen()) game.startRun('classic');
     } else if (game.state === 'over') {
-      game.startRun(game.mode, game.levelIdx);
+      if (game._overReady !== false) {
+        game.startRun(game.mode, game.levelIdx);
+      }
     } else if (game.state === 'complete') {
       if (game.levelIdx + 1 < LEVELS.length) game.startRun('level', game.levelIdx + 1);
       else game.gotoMenu();
@@ -2263,7 +2386,8 @@ const input = new InputManager(stage, {
     }
   },
   onBurst(active) {
-    game.burst = active && game.state === 'playing';
+    game._burstHeld = active;
+    game.burst = Boolean(active) && game.state === 'playing';
   },
   onGamepad(connected) {
     ui.toast(connected ? '🎮 Gamepad connected' : '🎮 Gamepad disconnected', 'hint');
@@ -2317,14 +2441,21 @@ window.addEventListener('blur', () => {
 });
 
 window.addEventListener('beforeunload', () => {
-  if (game.mode === 'zen' && game.run && (game.state === 'playing' || game.state === 'paused' || game.state === 'countdown')) {
+  if (game.mode === 'zen' && game.run && game.run.started && (game.state === 'playing' || game.state === 'paused')) {
     game.persistZenBest(false);
+  } else if (game.mode === 'daily' && game.run && game.run.started && (game.state === 'playing' || game.state === 'paused')) {
+    game.recordDailyScore();
   } else {
     game.persist();
   }
 });
 
+let _audioUnlocked = false;
 const unlockOnce = () => {
+  if (_audioUnlocked) return;
+  _audioUnlocked = true;
+  window.removeEventListener('pointerdown', unlockOnce);
+  window.removeEventListener('keydown', unlockOnce);
   sound.unlock();
   if (game.state === 'menu') sound.startMusic(BIOMES.rainforest.music);
 };

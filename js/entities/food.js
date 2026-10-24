@@ -351,16 +351,21 @@ class FoodManager {
       } else if (it.type === 'egg') {
         it.wob += dt * 0.004;
         it.life -= dt;
-        if (it.life <= 0 && env.view) {
-          // Hatch into a golden berry with a fresh timer
+        if (it.life <= 0) {
           const px = it.gx;
           const py = it.gy;
           this._occRemove(px, py);
           this.items.splice(i, 1);
-          this.items.push({ type: 'golden', gx: px, gy: py, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
-          this._occAdd(px, py);
           itemsChanged = true;
-          if (env.particles) {
+          const hasGolden = this.items.some(x => x.type === 'golden');
+          if (!hasGolden) {
+            this.items.push({ type: 'golden', gx: px, gy: py, age: 0, life: CONFIG.goldenLifeMs, maxLife: CONFIG.goldenLifeMs, hop: 0, pop: 0 });
+            this._occAdd(px, py);
+          } else {
+            const existing = this.items.find(x => x.type === 'golden');
+            if (existing) existing.life = CONFIG.goldenLifeMs;
+          }
+          if (env && env.particles && env.view) {
             env.particles.burst(env.view.cx(px), env.view.cy(py), {
               count: 16, colors: ['#f8f4e6', '#ffd54a', '#fff59d'], speed: 0.12, size: 2.2, life: 650, type: 'spark'
             });
@@ -494,7 +499,8 @@ class FoodManager {
 
 
   getNearestItemPx(px, py, cell) {
-    if (this._cachedNearest &&
+    if (this.insects.length === 0 &&
+        this._cachedNearest &&
         this._cachedNearest.cell === cell &&
         this._cachedNearest.ver === this._ver &&
         Math.abs(this._cachedNearest.px - px) < 1 &&
@@ -530,7 +536,11 @@ class FoodManager {
       }
     }
     const res = best ? { x: best.x, y: best.y, d: Math.sqrt(best.d2) } : null;
-    this._cachedNearest = { px, py, cell, ver: this._ver, res };
+    if (this.insects.length === 0) {
+      this._cachedNearest = { px, py, cell, ver: this._ver, res };
+    } else {
+      this._cachedNearest = null;
+    }
     return res;
   }
 
