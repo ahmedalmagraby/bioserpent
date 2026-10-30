@@ -3,7 +3,22 @@ window.BS = window.BS || {};
 "use strict";
 const { SKINS, drawSkinPreview } = BS;
 
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// Line icons for the HUD objective card (one style, rendered the same on every OS).
+const svgIcon = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const HUD_ICONS = {
+  leaf: svgIcon('<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14"/><path d="M5 19 13 11"/>'),
+  sun: svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  gem: svgIcon('<path d="M6 4h12l4 6-10 11L2 10z"/><path d="M2 10h20M12 21 8.5 10 12 4l3.5 6z"/>'),
+  wave: svgIcon('<path d="M2 9c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/><path d="M2 16c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/>'),
+  flag: svgIcon('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
+  clock: svgIcon('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>'),
+  lotus: svgIcon('<path d="M12 20c-4 0-8-2-9-6 3 0 6 1 9 4 3-3 6-4 9-4-1 4-5 6-9 6z"/><path d="M12 18c-2-2-3-5-3-8 1.5 1 2.5 2 3 3 .5-1 1.5-2 3-3 0 3-1 6-3 8z"/>'),
+  calendar: svgIcon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  ruler: svgIcon('<path d="M3 17 17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>'),
+  bolt: svgIcon('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>')
+};
+
+const FOCUSABLE ='button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 class UIManager {
   constructor(handlers) {
@@ -13,6 +28,8 @@ class UIManager {
       hud: this.$('hud'),
       score: this.$('hudScore'),
       best: this.$('hudBest'),
+      bestChip: this.$('hudBestChip'),
+      bestLabel: this.$('hudBestLabel'),
       combo: this.$('hudCombo'),
       chipBar: this.$('chipBar'),
       dpad: this.$('dpad'),
@@ -414,11 +431,16 @@ class UIManager {
       }
     }
     if (d.best !== undefined) this.el.best.textContent = d.best;
-    if (d.stats !== undefined) this.setStats(d.stats);
+    if (d.newBest !== undefined && this.el.bestChip) {
+      this.el.bestChip.classList.toggle('is-new-best', !!d.newBest);
+      if (this.el.bestLabel) this.el.bestLabel.textContent = d.newBest ? 'New best' : 'Best';
+    }
+    if (d.objective !== undefined) this.setObjective(d.objective);
     if (d.combo !== undefined) {
       if (d.combo) {
         const prevCombo = this.el.combo.textContent;
         this.el.combo.textContent = d.combo;
+        this.el.combo.classList.toggle('hot', !!d.comboHot);
         this.el.combo.classList.remove('vis-hidden', 'hidden');
         if (prevCombo !== d.combo) {
           if (this.el.combo.classList.contains('pulse')) {
@@ -451,10 +473,8 @@ class UIManager {
     }
   }
 
+  // Buffs are fixed-size rings: the glyph in the middle, the arc is the time left.
   setChips(list) {
-    if (this.el.chipBar) {
-      this.el.chipBar.classList.toggle('compact', list.length > 2);
-    }
     const seen = new Set();
     for (const c of list) {
       seen.add(c.key);
@@ -462,12 +482,15 @@ class UIManager {
       if (!chip) {
         const el = document.createElement('div');
         el.className = 'chip';
-        el.innerHTML = `<span class="dot" style="background:${c.color}">${c.glyph}</span><span>${c.label}</span><span class="bar"><i style="background:${c.color}"></i></span>`;
+        el.title = c.label;
+        el.setAttribute('aria-label', c.label);
+        el.style.setProperty('--c', c.color);
+        el.innerHTML = `<span class="dot">${c.glyph}</span>`;
         this.el.chipBar.appendChild(el);
-        chip = { el, bar: el.querySelector('.bar i') };
+        chip = { el };
         this.chips.set(c.key, chip);
       }
-      chip.bar.style.width = Math.max(0, Math.min(1, c.frac)) * 100 + '%';
+      chip.el.style.setProperty('--p', Math.max(0, Math.min(1, c.frac)).toFixed(3));
       chip.el.classList.toggle('buff-expiring', c.frac < 0.25);
     }
     for (const [key, chip] of this.chips) {
@@ -878,18 +901,32 @@ class UIManager {
     document.body.classList.toggle('dpad-open', !!v);
   }
 
-  setStats(list) {
-    let html = '';
-    for (const s of list) {
-      const cls = s.cls ? ' ' + s.cls : '';
-      const titleAttr = s.title ? ` title="${s.title}"` : '';
-      const iconHtml = s.icon ? `<span class="stat-icon">${s.icon}</span>` : '';
-      const labelHtml = s.l ? `<small>${s.l}</small>` : '';
-      html += `<span class="stat${cls}"${titleAttr}>${iconHtml}<b>${s.v}</b>${labelHtml}</span>`;
+  // The centre card: one objective for the current mode.
+  // o = { icon, title, sub, meta: { icon, text, flash }, frac, color, cls, tip }
+  setObjective(o) {
+    const box = this.el.hudStats;
+    if (!box) return;
+    const icon = o.icon ? `<span class="obj-icon">${HUD_ICONS[o.icon] || ''}</span>` : '';
+    const sub = o.sub ? `<span class="obj-sub">${o.sub}</span>` : '';
+    const meta = o.meta
+      ? `<span class="obj-meta${o.meta.flash ? ' flash' : ''}">${HUD_ICONS[o.meta.icon] || ''}${o.meta.text}</span>`
+      : '';
+    const hasBar = o.frac !== undefined && o.frac !== null;
+    const html = `<div class="obj-head">${icon}<span class="obj-title">${o.title}</span>${sub}${meta}</div>` +
+      (hasBar ? '<div class="obj-bar"><i></i></div>' : '');
+    const cls = 'hud-objective' + (o.cls ? ' ' + o.cls : '');
+    if (box.className !== cls) box.className = cls;
+    box.style.setProperty('--obj-color', o.color || 'var(--accent)');
+    if (o.tip !== undefined) box.title = o.tip;
+    if (html !== this._statsHtml) {
+      this._statsHtml = html;
+      box.innerHTML = html;
+      this._objFill = hasBar ? box.querySelector('.obj-bar i') : null;
     }
-    if (html === this._statsHtml) return;
-    this._statsHtml = html;
-    this.el.hudStats.innerHTML = html;
+    // Width is set on the live element so the bar eases instead of jumping.
+    if (hasBar && this._objFill) {
+      this._objFill.style.width = (Math.max(0, Math.min(1, o.frac)) * 100).toFixed(1) + '%';
+    }
   }
 
   openGuide() {

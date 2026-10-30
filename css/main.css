@@ -50,11 +50,13 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
 .hidden { display: none !important; }
 .vis-hidden { visibility: hidden !important; pointer-events: none !important; }
 
-/* ---------- HUD ---------- */
+/* ---------- HUD ----------
+   Three zones: score (with its combo multiplier and best) on the left, the
+   current mode's objective in the centre, buff rings and pause on the right. */
 #hud {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 8px 14px 4px;
   z-index: 20;
@@ -67,185 +69,67 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
-.hud-left {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.hud-left { justify-content: flex-start; }
 
 .hud-score-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 3px;
   background: var(--glass);
   border: 1px solid var(--stroke);
   border-radius: 14px;
-  padding: 4px 12px;
+  padding: 5px 12px 6px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  min-width: 78px;
+  min-width: 96px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.hud-label {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-  line-height: 1.1;
+.hud-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
 }
 
 .hud-value {
-  font-size: 22px;
+  font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 24px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1;
   color: #ffffff;
   display: inline-block;
 }
 
-.hud-best-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: rgba(255, 213, 74, 0.08);
-  border: 1px solid rgba(255, 213, 74, 0.22);
-  border-radius: 12px;
-  padding: 4px 9px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--gold);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.hud-best-icon {
-  font-size: 11px;
-}
-
-.hud-best-val {
-  font-variant-numeric: tabular-nums;
-  font-weight: 800;
-}
-
-.hud-center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  min-width: 0;
-  gap: 2px;
-}
-
-.hud-stats {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  min-height: 28px;
-  align-items: center;
-  flex-wrap: nowrap;
-}
-
-.stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--glass);
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  padding: 4px 10px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  white-space: nowrap;
-  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.stat-icon {
-  font-size: 12px;
-  line-height: 1;
-}
-
-.stat b {
-  font-size: 14px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  color: #fff;
-}
-
-.stat small {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-  margin-left: 2px;
-}
-
-.stat.biome-stat {
-  border-color: rgba(126, 224, 138, 0.35);
-  background: rgba(126, 224, 138, 0.06);
-}
-.stat.biome-stat.rainforest { border-color: rgba(87, 160, 90, 0.45); }
-.stat.biome-stat.oasis { border-color: rgba(217, 169, 95, 0.45); }
-.stat.biome-stat.cavern { border-color: rgba(110, 231, 240, 0.45); }
-.stat.biome-stat.reef { border-color: rgba(84, 194, 216, 0.45); }
-
-.stat.goal-stat {
-  border-color: rgba(255, 107, 107, 0.35);
-  background: rgba(255, 107, 107, 0.06);
-}
-
-.stat.level-badge {
-  border-color: rgba(62, 201, 122, 0.35);
-  font-weight: 800;
-}
-
-.stat.timer-stat {
-  border-color: rgba(255, 213, 74, 0.35);
-  background: rgba(255, 213, 74, 0.06);
-}
-
-.stat.danger b, .stat.timer-stat.danger b {
-  color: var(--danger);
-}
-.stat.timer-stat.danger {
-  border-color: rgba(255, 107, 107, 0.6);
-  animation: urgentPulse 0.5s ease-in-out infinite;
-}
-
+/* Combo multiplier badge, sat on the score it multiplies */
 .hud-combo {
-  display: block;
-  height: 16px;
-  line-height: 16px;
-  margin-top: 1px;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 213, 74, 0.16);
+  border: 1px solid rgba(255, 213, 74, 0.45);
   color: var(--gold);
-  text-shadow: 0 0 10px rgba(255, 213, 74, 0.6);
-  transition: opacity 0.2s ease;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
   white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+.hud-combo.hot {
+  background: rgba(255, 105, 180, 0.18);
+  border-color: rgba(255, 105, 180, 0.55);
+  color: #ff8fc8;
 }
 
-#hudCenter.urgent .hud-stats {
-  filter: drop-shadow(0 0 10px rgba(255, 80, 80, 0.75));
-  animation: urgentPulse 0.5s ease-in-out infinite;
-}
-
+/* Combo timer: drains under the score while a combo is alive */
 .hud-bar {
-  width: min(180px, 35vw);
-  height: 3.5px;
-  margin: 2px auto 0;
+  width: 100%;
+  height: 3px;
   background: rgba(255, 255, 255, 0.12);
   border-radius: 3px;
   overflow: hidden;
@@ -255,18 +139,116 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
   display: block;
   height: 100%;
   width: 0%;
-  background: var(--accent);
+  background: var(--gold);
   border-radius: 3px;
   transition: width 0.08s linear;
 }
 
-.hud-right {
-  flex-shrink: 0;
+.hud-best-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  line-height: 1.2;
+}
+.hud-best-icon { color: var(--gold); flex-shrink: 0; }
+.hud-best-label { letter-spacing: 0.02em; }
+.hud-best-val {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+.hud-best-chip.is-new-best .hud-best-label,
+.hud-best-chip.is-new-best .hud-best-val { color: var(--gold); }
+
+/* Centre: one objective per mode, with an optional progress bar */
+.hud-center { justify-content: center; }
+
+.hud-objective {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: clamp(170px, 26vw, 260px);
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  padding: 6px 12px 7px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s ease;
+}
+.obj-head {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
+.obj-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--obj-color, var(--accent));
+}
+.obj-icon svg { width: 16px; height: 16px; }
+.obj-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.obj-sub {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.obj-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.obj-meta svg { width: 12px; height: 12px; }
+.obj-meta.flash { color: var(--gold); }
+.obj-bar {
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.obj-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--obj-color, var(--accent));
+  transition: width 0.25s ease;
+}
+.hud-objective.timer .obj-title { font-size: 17px; }
+.hud-objective.danger { border-color: rgba(255, 107, 107, 0.6); }
+.hud-objective.danger .obj-title { color: var(--danger); }
+#hudCenter.urgent .hud-objective {
+  filter: drop-shadow(0 0 10px rgba(255, 80, 80, 0.75));
+  animation: urgentPulse 0.5s ease-in-out infinite;
+}
+
+/* Right: buffs are fixed-size rings whose arc is the time left */
+.hud-right { justify-content: flex-end; }
 
 .hud-buffs {
   display: flex;
@@ -278,63 +260,28 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
 }
 
 .chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--glass-strong);
-  border: 1px solid var(--stroke);
-  border-radius: 999px;
-  padding: 3px 8px 3px 4px;
-  font-size: 11px;
-  font-weight: 700;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  --c: var(--accent);
+  --p: 1;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: conic-gradient(var(--c) calc(var(--p) * 1turn), rgba(255, 255, 255, 0.12) 0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   animation: chipIn 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  white-space: nowrap;
 }
-
 .chip .dot {
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  inset: 3px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 9px;
+  background: var(--glass-strong);
+  color: var(--c);
+  font-size: 11px;
   font-weight: 900;
-  color: #08130c;
-}
-
-.chip .bar {
-  width: 32px;
-  height: 3.5px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.chip .bar i {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.1s linear;
-}
-
-/* Compact buff chip mode when >2 chips active or manually toggled */
-#chipBar.compact .chip,
-.hud-buffs.compact .chip,
-.hud-chip-bar.compact .chip {
-  padding: 2px 5px 2px 3px;
-  gap: 3px;
-}
-#chipBar.compact .chip span:not(.dot):not(.bar),
-.hud-buffs.compact .chip span:not(.dot):not(.bar),
-.hud-chip-bar.compact .chip span:not(.dot):not(.bar) {
-  display: none;
-}
-#chipBar.compact .chip .bar,
-.hud-buffs.compact .chip .bar,
-.hud-chip-bar.compact .chip .bar {
-  width: 16px;
+  line-height: 1;
 }
 
 .icon-btn, .hud-pause-btn {
@@ -353,6 +300,7 @@ h1, h2, h3, .title, .screen-title, .mode-title, .over-rank-badge {
   place-items: center;
   position: relative;
 }
+.hud-pause-btn { flex-shrink: 0; }
 .hud-pause-btn::after {
   content: '';
   position: absolute;
@@ -1895,22 +1843,24 @@ input[type="range"]::-moz-range-thumb {
 
 @media (max-width: 520px) {
   :root { --dp: 52px; --dp-gap: 8px; }
-  #hud { padding: 6px 10px 2px; gap: 6px; }
-  .hud-score-card { min-width: 62px; padding: 3px 8px; border-radius: 11px; }
-  .hud-label { font-size: 8.5px; }
-  .hud-value { font-size: 18px; }
-  .hud-best-chip { padding: 3px 6px; font-size: 10.5px; border-radius: 9px; }
-  .hud-stats { gap: 4px; min-height: 24px; }
-  .stat { padding: 2px 7px; border-radius: 9px; gap: 3px; }
-  .stat-icon { font-size: 10.5px; }
-  .stat b { font-size: 12.5px; }
-  .stat small { font-size: 8px; }
+  /* Phones: the centre card flexes so the side zones never collide with it */
+  #hud { padding: 6px 10px 2px; gap: 6px; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .hud-score-card { min-width: 0; padding: 4px 9px 5px; border-radius: 12px; gap: 2px; }
+  .hud-score-row { gap: 5px; }
+  .hud-value { font-size: 19px; }
+  .hud-combo { font-size: 10.5px; padding: 0 5px; }
+  .hud-best-chip { font-size: 10px; }
+  .hud-best-label { display: none; }
+  .hud-objective { width: 100%; max-width: 170px; min-width: 0; padding: 5px 9px 6px; border-radius: 12px; gap: 4px; }
+  .obj-title { font-size: 12px; }
+  .obj-sub { font-size: 10.5px; }
+  .obj-meta { display: none; }
+  .hud-objective.timer .obj-title { font-size: 15px; }
   .hud-pause-btn { width: 34px; height: 34px; font-size: 11px; }
-  .hud-bar { width: min(130px, 30vw); height: 3px; }
-  .hud-combo { font-size: 11px; height: 14px; line-height: 14px; }
-  .chip { padding: 2px 5px 2px 3px; font-size: 10px; gap: 3px; }
-  .chip .dot { width: 14px; height: 14px; font-size: 8px; }
-  .chip .bar { width: 18px; height: 3px; }
+  .hud-buffs { gap: 0; }
+  .chip { width: 26px; height: 26px; }
+  .chip + .chip { margin-left: -5px; }
+  .chip .dot { inset: 2.5px; font-size: 9.5px; }
   .title { font-size: clamp(34px, 10vw, 52px); }
   .tagline { letter-spacing: 0.2em; }
   .panel { padding: 20px 16px; gap: 12px; }
@@ -1930,34 +1880,13 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 420px) {
-  /* Compact buff chips on narrow screens: hide text label, show glyph + micro bar */
-  .chip span:not(.dot):not(.bar) {
-    display: none;
-  }
-  .chip {
-    padding: 2px 5px 2px 3px;
-    gap: 3px;
-  }
-  .chip .bar {
-    width: 16px;
-  }
-  /* Compact stats: hide verbose small label, preserve icon and numeric value */
-  .stat small {
-    display: none;
-  }
-  .stat {
-    padding: 2px 5px;
-    gap: 2px;
-  }
-  .stat b {
-    font-size: 11.5px;
-  }
-  .hud-stats {
-    gap: 3px;
-  }
-  .hud-bar {
-    width: min(100px, 25vw);
-  }
+  /* Narrow phones: the objective keeps only its short counter */
+  .obj-title { display: none; }
+  .obj-sub { margin-left: 0; padding-left: 0; }
+  .hud-objective.timer .obj-title { display: block; }
+  .hud-objective.timer .obj-sub { display: none; }
+  .chip { width: 24px; height: 24px; }
+  .chip .dot { font-size: 9px; }
 }
 
 @media (max-width: 360px) {
@@ -1971,37 +1900,27 @@ input[type="range"]::-moz-range-thumb {
   }
   .hud-score-card {
     min-width: 0;
-    padding: 2px 6px;
+    padding: 3px 7px 4px;
   }
   .hud-value {
-    font-size: 16px;
+    font-size: 17px;
   }
-  /* Hide best chip on ultra-narrow screens during gameplay to preserve center space */
-  #hudBestChip {
-    display: none;
-  }
-  .chip .bar {
-    width: 12px;
-    height: 2.5px;
-  }
+  .hud-objective { padding: 4px 7px 5px; }
+  .chip { width: 22px; height: 22px; }
+  .chip .dot { inset: 2px; font-size: 8.5px; }
 }
 
 /* Landscape mode: side-by-side hero + modes layout to prevent vertical squishing */
 @media (max-height: 520px) and (orientation: landscape) {
   #hud { padding: 3px 10px 1px; gap: 6px; }
-  .hud-score-card { flex-direction: row; align-items: baseline; gap: 5px; min-width: 0; padding: 2px 8px; }
-  .hud-value { font-size: 15px; line-height: 1.1; }
-  .hud-label { font-size: 8.5px; }
-  .hud-best-chip { padding: 2px 6px; font-size: 10px; }
-  .hud-stats { min-height: 0; gap: 4px; }
-  .stat { padding: 2px 6px; font-size: 11px; }
-  .stat b { font-size: 11.5px; }
-  .stat small { font-size: 7.5px; }
-  .hud-combo { font-size: 10.5px; height: 13px; line-height: 13px; }
-  .hud-bar { height: 2.5px; }
+  .hud-score-card { flex-direction: row; align-items: center; gap: 8px; min-width: 0; padding: 3px 9px; }
+  .hud-value { font-size: 16px; }
+  .hud-bar { width: 40px; }
+  .hud-objective { padding: 3px 9px 4px; gap: 3px; }
+  .obj-title { font-size: 12px; }
   .hud-pause-btn { width: 30px; height: 30px; font-size: 10px; }
-  .chip { padding: 2px 5px 2px 3px; font-size: 9.5px; }
-  .chip .bar { width: 18px; }
+  .chip { width: 24px; height: 24px; }
+  .chip .dot { inset: 2.5px; font-size: 9px; }
   body.dpad-open #stage {
     padding-bottom: 6px;
     padding-left: calc(3 * var(--dp) + 2 * var(--dp-gap) + 34px);
@@ -2091,7 +2010,7 @@ input[type="range"]::-moz-range-thumb {
 
 /* Reduced transparency / low-end devices: drop expensive backdrop blurs */
 @media (prefers-reduced-transparency: reduce) {
-  .hud-score-card, .hud-best-chip, .hud-pause-btn, .hud-chip, .stat, .icon-btn, .chip, .btn, .card, .toast,
+  .hud-score-card, .hud-objective, .hud-pause-btn, .icon-btn, .btn, .card, .toast,
   .dp-btn, #joyBase, .screen.overlay, .modal, .setting-row select,
   .mode-card, .dock-btn, .menu-equipped-chip, .filter-tab {
     backdrop-filter: none !important;

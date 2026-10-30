@@ -182,6 +182,9 @@ const CAUSE_TITLE = {
 };
 
 const BIOME_ORDER = ['rainforest', 'oasis', 'cavern', 'reef'];
+const BIOME_ICON = { rainforest: 'leaf', oasis: 'sun', cavern: 'gem', reef: 'wave' };
+const BIOME_SHORT = { rainforest: 'Rainforest', oasis: 'Oasis', cavern: 'Cavern', reef: 'Reef' };
+const BIOME_COLOR = { rainforest: '#7ee08a', oasis: '#ffb648', cavern: '#6ee7f0', reef: '#54c2d8' };
 
 const DIR_VALUES = Object.values(DIRS);
 
@@ -1793,70 +1796,71 @@ class Game {
   updateHUDFrame(dt, force = false) {
     this.hudTimer += dt;
     if (!force && this.hudTimer < CONFIG.hudThrottleMs) return;
+    const elapsed = this.hudTimer;
     this.hudTimer = 0;
-    let stats;
+    const len = String(this.snake.length);
+    const lengthMeta = { icon: 'ruler', text: len };
+    // Speed only earns a spot while it is changing: flash it in place of length.
+    const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
+    if (this._hudSpeed !== undefined && speed !== this._hudSpeed) this._speedFlashMs = 1600;
+    this._hudSpeed = speed;
+    this._speedFlashMs = Math.max(0, (this._speedFlashMs || 0) - elapsed);
+    const meta = this._speedFlashMs > 0 ? { icon: 'bolt', text: speed, flash: true } : lengthMeta;
+    let objective;
     if (this.mode === 'timeattack') {
-      const t = Math.max(0, this.taTime / 1000).toFixed(1);
-      stats = [
-        { v: t + 's', l: 'Time', icon: '⏱', cls: 'timer-stat' + (this.taTime <= CONFIG.taUrgentMs ? ' danger' : '') },
-        { v: String(this.snake.length), l: 'Length', icon: '📏' }
-      ];
+      const urgent = this.taTime <= CONFIG.taUrgentMs;
+      objective = {
+        icon: 'clock', title: Math.max(0, this.taTime / 1000).toFixed(1) + 's',
+        meta: lengthMeta, frac: clamp(this.taTime / CONFIG.taStartMs, 0, 1),
+        color: urgent ? 'var(--danger)' : 'var(--gold)', cls: 'timer' + (urgent ? ' danger' : ''),
+        tip: 'Time left'
+      };
     } else if (this.mode === 'level') {
-      const goal = LEVELS[this.levelIdx].goalApples;
-      stats = [
-        { v: `LV ${String(this.levelIdx + 1).padStart(2, '0')}`, l: LEVELS[this.levelIdx].name, cls: 'level-badge' },
-        { v: `${this.run.apples}/${goal}`, l: 'Goal', icon: '🍎', cls: 'goal-stat' },
-        { v: String(this.snake.length), l: 'Length', icon: '📏' }
-      ];
+      const lv = LEVELS[this.levelIdx];
+      objective = {
+        icon: 'flag', title: `LV ${String(this.levelIdx + 1).padStart(2, '0')}`,
+        sub: `${this.run.apples}/${lv.goalApples} apples`, meta: lengthMeta,
+        frac: this.run.apples / lv.goalApples, color: 'var(--accent)', tip: lv.name
+      };
     } else if (this.mode === 'zen') {
-      stats = [
-        { v: 'Zen Flow', l: '', icon: '🪷', cls: 'biome-stat' },
-        { v: String(this.snake.length), l: 'Length', icon: '📏' }
-      ];
+      objective = { icon: 'lotus', title: 'Zen flow', sub: `${len} long`, color: '#f5a3c7', tip: 'No walls, no death' };
     } else if (this.mode === 'daily') {
-      const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
-      const biomeIcon = this.biomeKey === 'rainforest' ? '🌿' : this.biomeKey === 'oasis' ? '☀️' : this.biomeKey === 'cavern' ? '💎' : '🌊';
-      const biomeName = this.biome.name.split(' ')[0];
-      const modsSummary = (this.dailyMods || []).map(m => m.label).join(' · ') || 'Daily Challenge';
-      stats = [
-        { v: biomeName, l: modsSummary, icon: biomeIcon, cls: 'biome-stat ' + this.biomeKey, title: modsSummary },
-        { v: String(this.snake.length), l: 'Length', icon: '📏' },
-        { v: speed, l: 'Speed', icon: '⚡' }
-      ];
+      const mods = (this.dailyMods || []).map(m => m.label).join(' · ') || 'Daily Challenge';
+      objective = {
+        icon: BIOME_ICON[this.biomeKey], title: BIOME_SHORT[this.biomeKey], sub: 'Daily', meta,
+        color: BIOME_COLOR[this.biomeKey], tip: mods
+      };
     } else {
-      const speed = (CONFIG.stepMs.classic / this.stepMs).toFixed(1) + '×';
-      const nextBiomeIn = 12 - (this.run.foodEaten % 12);
-      const biomeIcon = this.biomeKey === 'rainforest' ? '🌿' : this.biomeKey === 'oasis' ? '☀️' : this.biomeKey === 'cavern' ? '💎' : '🌊';
-      const biomeName = this.biome.name.split(' ')[0];
-      stats = [
-        { v: biomeName, l: `${nextBiomeIn} to shift`, icon: biomeIcon, cls: 'biome-stat ' + this.biomeKey, title: `Biome changes in ${nextBiomeIn} nourishment` },
-        { v: String(this.snake.length), l: 'Length', icon: '📏' },
-        { v: speed, l: 'Speed', icon: '⚡' }
-      ];
+      const inStage = this.run.foodEaten % 12;
+      const next = BIOME_ORDER[(BIOME_ORDER.indexOf(this.biomeKey) + 1) % BIOME_ORDER.length];
+      objective = {
+        icon: BIOME_ICON[this.biomeKey], title: BIOME_SHORT[this.biomeKey],
+        sub: `${inStage}/12 to ${BIOME_SHORT[next]}`, meta, frac: inStage / 12,
+        color: BIOME_COLOR[this.biomeKey], tip: `Biome changes after ${12 - inStage} more`
+      };
     }
+    // The bar under the score is always the combo timer.
     let bar = null;
-    if (this.mode === 'level') {
-      const goal = LEVELS[this.levelIdx].goalApples;
-      bar = { frac: this.run.apples / goal, color: 'var(--accent)' };
-    } else if (this.mode === 'timeattack') {
-      const frac = clamp(this.taTime / CONFIG.taStartMs, 0, 1);
-      bar = { frac, color: this.taTime <= CONFIG.taUrgentMs ? '#ff6b6b' : 'var(--gold)' };
-    } else if (this.combo >= 2 && this.comboTimer > 0) {
-      const frac = clamp(this.comboTimer / CONFIG.comboMs, 0, 1);
-      bar = { frac, color: this.combo >= 4 ? '#ff69b4' : 'var(--gold)' };
+    let combo = null;
+    if (this.combo >= 2 && this.comboTimer > 0) {
+      const mult = 1 + (this.combo - 1) * CONFIG.comboStep;
+      combo = '×' + mult.toFixed(1);
+      bar = { frac: clamp(this.comboTimer / CONFIG.comboMs, 0, 1), color: this.combo >= 4 ? '#ff69b4' : 'var(--gold)' };
     }
     this.ui.updateHUD({
       score: this.run.score,
-      best: this.currentBest(),
-      stats,
-      combo: this.combo >= 2 ? `COMBO ×${this.combo}` : null,
+      best: this.currentBest() || '—',
+      newBest: !!this.newBestShown,
+      objective,
+      combo,
+      comboHot: this.combo >= 4,
       bar
     });
     const chips = [];
     for (const key of EFFECT_KEYS) {
       if (this.effects[key] > 0) {
         const meta = POWERUP_META[key];
-        chips.push({ key, label: meta.label.split(' ')[0], glyph: meta.short, color: meta.color, frac: Math.min(1, this.effects[key] / meta.dur) });
+        chips.push({ key, label: meta.label, glyph: meta.short, color: meta.color, frac: Math.min(1, this.effects[key] / meta.dur) });
       }
     }
     this.ui.setChips(chips);

@@ -40,7 +40,10 @@ class MockElement {
     this._className = initialClass;
     this.classList = new MockClassList(this);
     if (initialClass) this.classList.add(initialClass);
-    this.style = {};
+    this.style = {
+      setProperty(k, v) { this[k] = String(v); },
+      removeProperty(k) { delete this[k]; }
+    };
     this.dataset = {};
     this.attributes = {};
     this.children = [];
@@ -326,7 +329,7 @@ function createBrowserEnv() {
   ]);
 
   const knownIds = [
-    'app', 'hud', 'hudScore', 'hudBest', 'hudBestChip', 'hudCenter', 'hudStats', 'hudCombo', 'hudBar',
+    'app', 'hud', 'hudScore', 'hudBest', 'hudBestChip', 'hudBestLabel', 'hudCenter', 'hudStats', 'hudCombo', 'hudBar',
     'chipBar', 'btnPause', 'stage', 'game', 'countdown', 'countdownNum', 'dangerVignette',
     'dpad', 'dpBurst', 'joyBase', 'joyStick', 'ripple', 'screen-menu', 'menuSkinPreviewBtn',
     'menuSkinCanvas', 'menuSkinName', 'btnClassic', 'btnLevels', 'btnContinueGarden',

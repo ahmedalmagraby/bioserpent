@@ -13,27 +13,29 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/main.css?v=39">
-<link rel="stylesheet" href="css/animations.css?v=39">
+<link rel="stylesheet" href="css/main.css?v=42">
+<link rel="stylesheet" href="css/animations.css?v=42">
 </head>
 <body>
 <div id="app">
   <header id="hud" class="hidden">
     <div class="hud-zone hud-left">
       <div class="hud-score-card">
-        <span class="hud-label">Score</span>
-        <span id="hudScore" class="hud-value">0</span>
-      </div>
-      <div class="hud-best-chip" id="hudBestChip" title="High Score">
-        <svg class="svg-icon hud-best-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M2 19h20v2H2zm2-2l3-11 5 5 5-5 3 11H4z"/></svg>
-        <span id="hudBest" class="hud-best-val">0</span>
+        <div class="hud-score-row">
+          <span id="hudScore" class="hud-value" aria-label="Score">0</span>
+          <span id="hudCombo" class="hud-combo vis-hidden" title="Combo multiplier"></span>
+        </div>
+        <div id="hudBar" class="hud-bar vis-hidden" title="Combo timer"><i></i></div>
+        <div class="hud-best-chip" id="hudBestChip" title="High score">
+          <svg class="svg-icon hud-best-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M2 19h20v2H2zm2-2l3-11 5 5 5-5 3 11H4z"/></svg>
+          <span id="hudBestLabel" class="hud-best-label">Best</span>
+          <span id="hudBest" class="hud-best-val">0</span>
+        </div>
       </div>
     </div>
 
     <div class="hud-zone hud-center" id="hudCenter">
-      <div id="hudStats" class="hud-stats"></div>
-      <div id="hudCombo" class="hud-combo vis-hidden"></div>
-      <div id="hudBar" class="hud-bar vis-hidden"><i></i></div>
+      <div id="hudStats" class="hud-objective"></div>
     </div>
 
     <div class="hud-zone hud-right">
@@ -474,19 +476,19 @@
   <div id="toasts" role="status" aria-live="polite"></div>
 </div>
 
-<script src="js/engine/canvas.js?v=39"></script>
-<script src="js/engine/gameLoop.js?v=39"></script>
-<script src="js/engine/inputManager.js?v=39"></script>
-<script src="js/engine/particleSystem.js?v=39"></script>
-<script src="js/audio/soundManager.js?v=39"></script>
-<script src="js/entities/snake.js?v=39"></script>
-<script src="js/entities/rival.js?v=39"></script>
-<script src="js/entities/food.js?v=39"></script>
-<script src="js/entities/powerups.js?v=39"></script>
-<script src="js/entities/obstacles.js?v=39"></script>
-<script src="js/levels/levelData.js?v=39"></script>
-<script src="js/ui/uiManager.js?v=39"></script>
-<script src="js/main.js?v=39"></script>
+<script src="js/engine/canvas.js?v=42"></script>
+<script src="js/engine/gameLoop.js?v=42"></script>
+<script src="js/engine/inputManager.js?v=42"></script>
+<script src="js/engine/particleSystem.js?v=42"></script>
+<script src="js/audio/soundManager.js?v=42"></script>
+<script src="js/entities/snake.js?v=42"></script>
+<script src="js/entities/rival.js?v=42"></script>
+<script src="js/entities/food.js?v=42"></script>
+<script src="js/entities/powerups.js?v=42"></script>
+<script src="js/entities/obstacles.js?v=42"></script>
+<script src="js/levels/levelData.js?v=42"></script>
+<script src="js/ui/uiManager.js?v=42"></script>
+<script src="js/main.js?v=42"></script>
 
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

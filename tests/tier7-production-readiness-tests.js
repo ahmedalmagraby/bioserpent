@@ -740,13 +740,15 @@ suite.test('T7.44: Magnet steers idle insects toward the head', () => {
   const head = { x: 10, y: 10 };
   food.insects.push({ kind: 'beetle', fx: 6, fy: 10, tx: 6, ty: 10, prog: 1, dur: 320, dir: { x: 0, y: 1 }, age: 0, wing: 0, pop: 1 });
   food._rebuildOcc();
-  const origRandom = Math.random;
-  Math.random = () => 0.1; // always take the magnet hop
+  // Game scripts run in their own realm: stub that realm's Math, not ours.
+  const GameMath = BS.FoodManager.constructor('return Math')();
+  const origRandom = GameMath.random;
+  GameMath.random = () => 0.1; // always take the magnet hop
   try {
     food.magnetDrift(16, head, () => true, false, 6);
     food.update(16, { isFree: () => true, head });
   } finally {
-    Math.random = origRandom;
+    GameMath.random = origRandom;
   }
   assertEqual(food.insects[0].tx, 7, 'Beetle hops one cell toward the head');
   assertEqual(food.insects[0].ty, 10, 'Beetle stays on the head row');
@@ -816,6 +818,34 @@ suite.test('T7.48: Magnet-delivered food is eaten between steps and leaves a slu
   assertEqual(game.food.slurps.length, 1, 'Slurp ghost spawned');
   for (let i = 0; i < 20; i++) game.food.update(16, {});
   assertEqual(game.food.slurps.length, 0, 'Slurp ghost finishes and is removed');
+});
+
+suite.test('T7.49: HUD shows the combo multiplier, a mode objective, new-best state and buff rings', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.combo = 3;
+  game.comboTimer = BS.CONFIG.comboMs / 2;
+  game.run.foodEaten = 4;
+  game.newBestShown = true;
+  game.effects.magnet = 4500;
+  game.updateHUDFrame(0, true);
+  const ui = game.ui;
+  assertEqual(ui.el.combo.textContent, '×1.6', 'Combo shows the score multiplier, not the count');
+  assert(ui.el.hudBar.style && !ui.el.hudBar.classList.contains('vis-hidden'), 'Combo timer bar visible under the score');
+  assert(ui.el.hudStats.innerHTML.includes('4/12 to Oasis'), 'Classic objective shows biome progress');
+  assertEqual(ui.el.bestLabel.textContent, 'New best', 'Best label flips once the run beats it');
+  const ring = ui.chips.get('magnet');
+  assert(ring && ring.el.style['--p'] === '0.500', 'Buff ring arc reflects time left');
+  assertEqual(ring.el.title, 'Magnet Spore', 'Buff ring names the power-up on hover');
+
+  game.startRun('timeattack');
+  game.state = 'playing';
+  game.combo = 0;
+  game.updateHUDFrame(0, true);
+  assert(ui.el.hudStats.className.includes('timer'), 'Time Attack objective is the clock');
+  assert(ui.el.combo.classList.contains('vis-hidden'), 'No combo badge without a combo');
 });
 
 module.exports = suite;
