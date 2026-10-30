@@ -189,6 +189,16 @@ const DIR_VALUES = Object.values(DIRS);
 const EFFECT_KEYS = ['magnet', 'slow', 'ghost', 'multi', 'shield'];
 
 let _lastBuzz = 0;
+// Gape toward food that is close AND in front of the head: full open one
+// cell ahead, nothing for food beside or behind. `cell` is the unit of d.
+function mouthTargetFor(near, hx, hy, dir, cell) {
+  const prox = clamp((cell * 2.6 - near.d) / (cell * 1.6), 0, 1);
+  if (!prox || !dir) return prox;
+  if (near.d < cell * 0.35) return prox;
+  const facing = (dir.x * (near.x - hx) + dir.y * (near.y - hy)) / near.d;
+  return prox * clamp((facing - 0.1) / 0.8, 0, 1);
+}
+
 function buzz(pattern) {
   const s = game.save.settings;
   if (!s || s.muted || s.sfx === 0) return;
@@ -447,10 +457,11 @@ class Game {
       }
     }
     const apple = this.demoFood.items[0];
+    const dh = this.demoSnake.head;
     const mouthTarget = apple
-      ? clamp((Math.abs(apple.gx - this.demoSnake.head.x) + Math.abs(apple.gy - this.demoSnake.head.y)) < 3 ? 1 : 0, 0, 1)
+      ? mouthTargetFor({ x: apple.gx, y: apple.gy, d: Math.hypot(apple.gx - dh.x, apple.gy - dh.y) }, dh.x, dh.y, this.demoSnake.dir, 1)
       : 0;
-    this.demoSnake.tick(dt, mouthTarget);
+    this.demoSnake.tick(dt, mouthTarget, 'apple');
   }
 
   persist() {
@@ -2036,13 +2047,11 @@ class Game {
     }
     // While held, draw the head at rest on its cell instead of re-animating the last move.
     this.tInterp = this._graceHold ? 1 : clamp(this.acc / sms, 0, 1);
-    const near = this.food.getNearestItemPx(
-      this.view.cx(this.snake.head.x),
-      this.view.cy(this.snake.head.y),
-      this.view.cell
-    );
-    const mouthTarget = near && near.d < this.view.cell * 2.6 ? clamp(1 - near.d / (this.view.cell * 2.6), 0, 1) : 0;
-    this.snake.tick(dt, mouthTarget);
+    const headPx = this.view.cx(this.snake.head.x);
+    const headPy = this.view.cy(this.snake.head.y);
+    const near = this.food.getNearestItemPx(headPx, headPy, this.view.cell);
+    const mouthTarget = near ? mouthTargetFor(near, headPx, headPy, this.snake.dir, this.view.cell) : 0;
+    this.snake.tick(dt, mouthTarget, near && near.kind);
     this.food.update(effDt, { isFree: (x, y) => this.isFreeCell(x, y), view: this.view, particles: this.particles, head: this.snake.head });
     if (!this.food.items.some(i => i.type === 'apple' && i.gy < liveRows() && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
       this.food.spawnApple((x, y) => this.isFreeCell(x, y));

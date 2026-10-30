@@ -58,6 +58,10 @@ const SAMPLE = 0.3;
 const BODY_LOD_PTS = 120;
 // Mirrors BS.CONFIG.comboMax (kept local to avoid a load-order dependency)
 const COMBO_MAX = 5;
+const MOUTH_MAX = 1.25;
+const BITE_MS = 260;
+const JAW_HINGE = -0.1;
+const GUM = '#e26d8c';
 
 function ss(a, b, x) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -172,6 +176,8 @@ class Snake {
     this.impulse = 0;
     this.pulse = 0;
     this.mouth = 0;
+    this.mouthVel = 0;
+    this.biteT = 0;
     this.blinkT = rand(1800, 4200);
     this.blinkAnim = -1;
     this.tongueT = rand(1200, 2800);
@@ -197,7 +203,18 @@ class Snake {
     return removed;
   }
 
-  eatPulse() { this.pulse = 1; this.impulse = Math.max(this.impulse, 0.8); }
+  eatPulse() {
+    this.pulse = 1;
+    this.impulse = Math.max(this.impulse, 0.8);
+    this.biteT = BITE_MS;
+    this.mouthVel = Math.min(this.mouthVel, -0.006);
+  }
+
+  // 0..1 squash curve peaking as the jaws snap shut after an eat.
+  biteK() {
+    const e = BITE_MS - this.biteT;
+    return this.biteT > 0 && e < 140 ? Math.sin(Math.PI * e / 140) : 0;
+  }
 
   step(env) {
     while (this.pending.length) {
@@ -264,10 +281,10 @@ class Snake {
     return { teleported };
   }
 
-  tick(dt, mouthTarget) {
+  tick(dt, mouthTarget, mouthKind) {
     this.impulse = Math.max(0, this.impulse - dt * 0.0035);
     this.pulse = Math.max(0, this.pulse - dt * 0.004);
-    this.mouth += (mouthTarget - this.mouth) * Math.min(1, dt * 0.012);
+    this._tickMouth(dt, mouthTarget, mouthKind);
     if (this.blinkAnim < 0) {
       this.blinkT -= dt;
       if (this.blinkT <= 0) this.blinkAnim = 0;
@@ -287,6 +304,41 @@ class Snake {
         this.tongueAnim = -1;
         this.tongueT = rand(1400, 3600);
       }
+    }
+  }
+
+  // Damped spring: slow, slightly overshooting gape; fast snap shut that
+  // bounces off closed. During a bite the target is held shut, then a small
+  // reflex re-open, before following the approach target again.
+  _tickMouth(dt, target, kind) {
+    if (kind === 'golden' || kind === 'egg') target *= 1.2;
+    else if (kind === 'insect') target *= 0.3;
+    if (this.biteT > 0) {
+      this.biteT = Math.max(0, this.biteT - dt);
+      const e = BITE_MS - this.biteT;
+      target = e < 90 ? 0 : e < 190 ? 0.3 : target;
+    }
+    let left = Math.min(dt, 100);
+    while (left > 0) {
+      const h = Math.min(16, left);
+      left -= h;
+      // Small settles around the target keep the soft spring so the gape overshoots.
+      const closing = target < this.mouth - 0.2;
+      const w = this.biteT > 0 ? 0.05 : closing ? 0.032 : 0.011;
+      const z = this.biteT > 0 ? 0.45 : closing ? 0.75 : 0.5;
+      this.mouthVel += (w * w * (target - this.mouth) - 2 * z * w * this.mouthVel) * h;
+      this.mouth += this.mouthVel * h;
+      if (this.mouth < 0) {
+        this.mouth = 0;
+        this.mouthVel *= -0.35;
+      } else if (this.mouth > MOUTH_MAX) {
+        this.mouth = MOUTH_MAX;
+        this.mouthVel = 0;
+      }
+    }
+    // Insects get tasted, not gulped: flick the tongue while one is close.
+    if (kind === 'insect' && target > 0.05 && this.tongueAnim < 0) {
+      this.tongueT = Math.min(this.tongueT, 90);
     }
   }
 
@@ -468,7 +520,9 @@ class Snake {
         blinkK,
         pdx, pdy,
         tongueK,
-        stretch: this.impulse
+        stretch: this.impulse,
+        bite: this.biteK(),
+        time
       });
       if (state.magnet) {
         ctx.save();
@@ -634,37 +688,31 @@ function drawHead(ctx, x, y, ang, R, skin, o) {
   ctx.translate(x, y);
   ctx.rotate(ang);
   const st = o.stretch ?? 0;
-  ctx.scale(1 + st * 0.22, 1 - st * 0.13);
+  const bite = o.bite ?? 0;
+  ctx.scale((1 + st * 0.22) * (1 - bite * 0.1), (1 - st * 0.13) * (1 + bite * 0.12));
+  const alpha = o.alpha ?? 1;
+  const mo = o.mouth ?? 0;
+  const rx = R * 1.18;
+  const ry = R * 0.94;
+  // Each side of the head is a jaw pivoting on a hinge behind the eyes.
+  const ga = mo > 0.04 ? mo * 0.4 : 0;
+  const hx = R * JAW_HINGE;
   ctx.lineWidth = R * 0.2;
   ctx.strokeStyle = skin.outline;
-  ctx.fillStyle = skin.c1;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, R * 1.18, R * 0.94, 0, 0, TAU);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = skin.belly;
-  ctx.globalAlpha = (o.alpha ?? 1) * 0.5;
-  ctx.beginPath();
-  ctx.ellipse(R * 0.42, 0, R * 0.55, R * 0.5, 0, 0, TAU);
-  ctx.fill();
-  ctx.globalAlpha = o.alpha ?? 1;
-  if (o.mouth > 0.06) {
-    const mo = o.mouth;
-    ctx.fillStyle = '#4a0e1e';
+  if (!ga) {
+    ctx.fillStyle = skin.c1;
     ctx.beginPath();
-    ctx.moveTo(R * 0.1, 0);
-    ctx.lineTo(R * 1.3, -R * 0.62 * mo);
-    ctx.quadraticCurveTo(R * 1.42, 0, R * 1.3, R * 0.62 * mo);
-    ctx.closePath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
     ctx.fill();
-    if (mo > 0.4) {
-      ctx.strokeStyle = skin.tongue;
-      ctx.lineWidth = R * 0.1;
-      ctx.beginPath();
-      ctx.moveTo(R * 0.5, 0);
-      ctx.lineTo(R * 1.15, 0);
-      ctx.stroke();
-    }
+    ctx.stroke();
+    ctx.fillStyle = skin.belly;
+    ctx.globalAlpha = alpha * 0.5;
+    ctx.beginPath();
+    ctx.ellipse(R * 0.42, 0, R * 0.55, R * 0.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = alpha;
+  } else {
+    drawJaws(ctx, R, rx, ry, hx, ga, mo, skin, alpha, o.time ?? 0);
   }
   // Rotate world gaze vector into head-relative local coordinate space
   const cosA = Math.cos(-ang);
@@ -675,8 +723,8 @@ function drawHead(ctx, x, y, ang, R, skin, o) {
   const localLookY = rawX * sinA + rawY * cosA;
 
   for (const s of [-1, 1]) {
-    const ex = R * 0.3;
-    const ey = s * R * 0.5;
+    // Eyes ride half the jaw swing so they spread without leaving the skull.
+    const [ex, ey] = rotAbout(R * 0.3, s * R * 0.5, hx, s * ga * 0.5);
     ctx.save();
     ctx.translate(ex, ey);
     ctx.scale(1, o.blinkK ?? 1);
@@ -699,12 +747,13 @@ function drawHead(ctx, x, y, ang, R, skin, o) {
   }
   ctx.fillStyle = skin.outline;
   for (const s of [-1, 1]) {
+    const [nx, ny] = rotAbout(R * 0.98, s * R * 0.2, hx, s * ga);
     ctx.beginPath();
-    ctx.arc(R * 0.98, s * R * 0.2, R * 0.05, 0, TAU);
+    ctx.arc(nx, ny, R * 0.05, 0, TAU);
     ctx.fill();
   }
   ctx.restore();
-  if (o.tongueK > 0.02 && (o.mouth ?? 0) < 0.3) {
+  if (o.tongueK > 0.02 && mo < 0.3) {
     const len = R * 1.5 * o.tongueK;
     const tx = x + Math.cos(ang) * R * 1.15;
     const ty = y + Math.sin(ang) * R * 1.15;
@@ -727,6 +776,120 @@ function drawHead(ctx, x, y, ang, R, skin, o) {
   }
 }
 
+function rotAbout(px, py, hx, a) {
+  if (!a) return [px, py];
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const dx = px - hx;
+  return [hx + dx * c - py * s, dx * s + py * c];
+}
+
+// Open-mouth head, in head-local space (+x forward). Draw order: throat,
+// tongue, the two jaws (with gums and fangs), then the static skull cap
+// that hides the jaws' back ends around the hinge.
+function drawJaws(ctx, R, rx, ry, hx, ga, mo, skin, alpha, time) {
+  const reach = rx - hx;
+  const tipX = hx + reach * Math.cos(ga);
+  const tipY = reach * Math.sin(ga);
+  const throat = ctx.createRadialGradient(hx, 0, 0, hx, 0, reach);
+  throat.addColorStop(0, '#1e040d');
+  throat.addColorStop(0.6, '#4a0e1e');
+  throat.addColorStop(1, '#7a2038');
+  ctx.fillStyle = throat;
+  ctx.beginPath();
+  ctx.moveTo(hx, 0);
+  ctx.lineTo(tipX, -tipY);
+  ctx.quadraticCurveTo(tipX + R * 0.1, 0, tipX, tipY);
+  ctx.closePath();
+  ctx.fill();
+
+  if (mo > 0.35) {
+    const tk = clamp((mo - 0.35) / 0.4, 0, 1);
+    const wig = Math.sin(time * 0.025) * R * 0.07 * tk;
+    const bx = hx + R * 0.25;
+    const mx = bx + R * 0.65 * tk;
+    const fork = R * 0.18 * tk;
+    ctx.strokeStyle = skin.tongue;
+    ctx.lineWidth = R * 0.11;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx, 0);
+    ctx.quadraticCurveTo((bx + mx) / 2, -wig * 0.5, mx, wig);
+    ctx.lineTo(mx + fork, wig - fork * 0.55);
+    ctx.moveTo(mx, wig);
+    ctx.lineTo(mx + fork, wig + fork * 0.55);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+
+  const lipK = clamp(mo * 4, 0, 1);
+  const fangK = clamp((mo - 0.3) / 0.3, 0, 1);
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.translate(hx, 0);
+    ctx.rotate(s * ga);
+    ctx.translate(-hx, 0);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(hx, s < 0 ? -ry * 1.3 : 0, rx * 2, ry * 1.3);
+    ctx.clip();
+    ctx.fillStyle = skin.c1;
+    ctx.strokeStyle = skin.outline;
+    ctx.lineWidth = R * 0.2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = skin.belly;
+    ctx.globalAlpha = alpha * 0.5;
+    ctx.beginPath();
+    ctx.ellipse(R * 0.42, 0, R * 0.55, R * 0.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = alpha * lipK;
+    ctx.strokeStyle = GUM;
+    ctx.lineWidth = R * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(hx, 0);
+    ctx.lineTo(rx, 0);
+    ctx.stroke();
+    ctx.restore();
+    if (fangK > 0) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#fdfdf5';
+      ctx.strokeStyle = skin.outline;
+      ctx.lineWidth = R * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(R * 0.6, 0);
+      ctx.lineTo(R * 0.84, 0);
+      ctx.lineTo(R * 0.74, -s * R * 0.26 * fangK);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  ctx.globalAlpha = alpha;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-rx * 1.5, -ry * 1.5, hx + rx * 1.5, ry * 3);
+  ctx.clip();
+  ctx.fillStyle = skin.c1;
+  ctx.lineWidth = R * 0.2;
+  ctx.strokeStyle = skin.outline;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = skin.belly;
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.beginPath();
+  ctx.ellipse(R * 0.42, 0, R * 0.55, R * 0.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = alpha;
+}
+
 function drawSkinPreview(canvas, skin) {
   const w = 84;
   const h = 56;
@@ -747,7 +910,7 @@ function drawSkinPreview(canvas, skin) {
   }
   drawBody(ctx, pts, 17, skin, { alpha: 1, time: 800 });
   drawHead(ctx, pts[0].px + 4, pts[0].py, 0, 17 * 0.74 * 0.62, skin, {
-    alpha: 1, mouth: 0.25, blinkK: 1, pdx: 0.8, pdy: 0, tongueK: 0, stretch: 0
+    alpha: 1, mouth: 0, blinkK: 1, pdx: 0.8, pdy: 0, tongueK: 0, stretch: 0
   });
 }
 

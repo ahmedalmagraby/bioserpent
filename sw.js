@@ -1,5 +1,5 @@
 // BioSerpent service worker — offline-first cache for PWA install.
-const CACHE = 'bioserpent-v34';
+const CACHE = 'bioserpent-v35';
 const ASSETS = [
   './',
   './index.html',

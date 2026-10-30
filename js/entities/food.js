@@ -520,7 +520,7 @@ class FoodManager {
       const d2 = dx * dx + dy * dy;
       if (d2 < bd2) {
         bd2 = d2;
-        best = { x, y, d2 };
+        best = { x, y, d2, kind: it.type };
       }
     }
     for (let i = 0; i < this.insects.length; i++) {
@@ -532,10 +532,10 @@ class FoodManager {
       const d2 = dx * dx + dy * dy;
       if (d2 < bd2) {
         bd2 = d2;
-        best = { x, y, d2 };
+        best = { x, y, d2, kind: 'insect' };
       }
     }
-    const res = best ? { x: best.x, y: best.y, d: Math.sqrt(best.d2) } : null;
+    const res = best ? { x: best.x, y: best.y, d: Math.sqrt(best.d2), kind: best.kind } : null;
     if (this.insects.length === 0) {
       this._cachedNearest = { px, py, cell, ver: this._ver, res };
     } else {
