@@ -229,6 +229,7 @@ class MockCanvasContext2D {
   fill() {}
   stroke() {}
   clip() {}
+  setLineDash() {}
   setTransform() {}
   transform() {}
   resetTransform() {}

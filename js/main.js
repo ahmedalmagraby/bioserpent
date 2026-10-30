@@ -187,6 +187,11 @@ const DIR_VALUES = Object.values(DIRS);
 
 // Timed power-up effects, ticked down each frame and shown as HUD chips.
 const EFFECT_KEYS = ['magnet', 'slow', 'ghost', 'multi', 'shield'];
+// Magnet reach grows from base to base + 2 over its first few seconds; repeat
+// pickups stack duration up to the cap.
+const MAGNET_BASE_REACH = 6;
+const MAGNET_GROW_MS = 4000;
+const MAGNET_CAP_MS = 15000;
 
 let _lastBuzz = 0;
 // Gape toward food that is close AND in front of the head: full open one
@@ -535,8 +540,10 @@ class Game {
 
   isMagnetSafe(x, y) {
     if (!this.isPassableCell(x, y)) return false;
+    // The mouth always accepts food, even over a power-up not yet collected this step.
     const isHead = this.snake && this.snake.head && x === this.snake.head.x && y === this.snake.head.y;
-    if (!isHead && this.snake.isOccupied(x, y)) return false;
+    if (isHead) return true;
+    if (this.snake.isOccupied(x, y)) return false;
     if (this.rival && this.rival.snake && this.rival.snake.isOccupied(x, y)) return false;
     if (this.powerups && this.powerups.occupied && this.powerups.occupied(x, y)) return false;
     return true;
@@ -1298,6 +1305,8 @@ class Game {
       if (removed.length) {
         this.particles.popup(hx, hy + this.view.cell, '-' + removed.length + ' tail', meta.color, 14);
       }
+    } else if (type === 'magnet') {
+      this.effects.magnet = Math.min(MAGNET_CAP_MS, this.effects.magnet + meta.dur);
     } else {
       this.effects[type] = meta.dur;
     }
@@ -1627,12 +1636,46 @@ class Game {
     this._graceDelay = CONFIG.graceMinMs;
   }
 
+  wrapsEdges() {
+    return this.mode === 'zen'
+      || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
+      || (this.mode === 'daily' && dailyModActive('wrap'));
+  }
+
+  magnetReach() {
+    return MAGNET_BASE_REACH + Math.round(2 * clamp((this._magnetMs || 0) / MAGNET_GROW_MS, 0, 1));
+  }
+
+  _magnetTick() {
+    if (this.sound && typeof this.sound.magnetTick === 'function') this.sound.magnetTick();
+  }
+
+  // Food that a magnet delivered to the head cell: swallow it with a slurp.
+  eatMagnetArrivals() {
+    const h = this.snake.head;
+    let item;
+    while ((item = this.food.collideCell(h.x, h.y))) {
+      this.food.slurp(item);
+      if (item.type === 'egg') this.consumeEgg();
+      else this.consume(item.type === 'apple' ? 'apple' : 'golden');
+    }
+  }
+
+  // Between snake steps the field keeps pulling, so food glides in on its own
+  // rather than only moving when the snake does.
+  magnetFrame(dt) {
+    const h = this.snake.head;
+    this.food.magnetDrift(dt, h, (x, y) => this.isMagnetSafe(x, y), this.wrapsEdges(),
+      this.magnetReach(), this.particles, this.view, () => this._magnetTick());
+    this.eatMagnetArrivals();
+    const ins = this.food.insectHit(h.x, h.y);
+    if (ins) this.consumeInsect(ins.kind);
+  }
+
   doStep(dt = 16) {
     if (this.run) this.run.started = true;
     const env = {
-      wrap: this.mode === 'zen'
-        || (this.mode === 'classic' && this.save.settings.walls === 'wrap')
-        || (this.mode === 'daily' && dailyModActive('wrap')),
+      wrap: this.wrapsEdges(),
       cols: COLS,
       rows: liveRows(),
       ghost: this.effects.ghost > 0,
@@ -1676,23 +1719,9 @@ class Game {
       else this.consume(item.type === 'apple' ? 'apple' : 'golden');
     }
     if (this.effects.magnet > 0) {
-      this.food.magnetPull(
-        h,
-        (x, y) => this.isMagnetSafe(x, y),
-        env.wrap,
-        this.burst,
-        this.particles,
-        this.view,
-        () => {
-          if (this.sound && typeof this.sound.magnetTick === 'function') {
-            this.sound.magnetTick();
-          }
-        }
-      );
-      while ((item = this.food.collideCell(h.x, h.y))) {
-        if (item.type === 'egg') this.consumeEgg();
-        else this.consume(item.type === 'apple' ? 'apple' : 'golden');
-      }
+      this.food.magnetPull(h, (x, y) => this.isMagnetSafe(x, y), env.wrap, this.burst,
+        this.particles, this.view, () => this._magnetTick(), this.magnetReach());
+      this.eatMagnetArrivals();
     }
     const ins = this.food.insectHit(h.x, h.y);
     if (ins) this.consumeInsect(ins.kind);
@@ -1827,7 +1856,7 @@ class Game {
     for (const key of EFFECT_KEYS) {
       if (this.effects[key] > 0) {
         const meta = POWERUP_META[key];
-        chips.push({ key, label: meta.label.split(' ')[0], glyph: meta.short, color: meta.color, frac: this.effects[key] / meta.dur });
+        chips.push({ key, label: meta.label.split(' ')[0], glyph: meta.short, color: meta.color, frac: Math.min(1, this.effects[key] / meta.dur) });
       }
     }
     this.ui.setChips(chips);
@@ -1972,6 +2001,7 @@ class Game {
     }
     if (this.state !== 'playing') return;
     if (this._nearMissCd > 0) this._nearMissCd = Math.max(0, this._nearMissCd - dt);
+    this._magnetMs = this.effects.magnet > 0 ? (this._magnetMs || 0) + dt : 0;
     for (const k of EFFECT_KEYS) {
       if (this.effects[k] > 0) {
         this.effects[k] -= dt;
@@ -2047,6 +2077,10 @@ class Game {
     }
     // While held, draw the head at rest on its cell instead of re-animating the last move.
     this.tInterp = this._graceHold ? 1 : clamp(this.acc / sms, 0, 1);
+    if (this.effects.magnet > 0) {
+      this.magnetFrame(effDt);
+      if (this.state !== 'playing') return;
+    }
     const headPx = this.view.cx(this.snake.head.x);
     const headPy = this.view.cy(this.snake.head.y);
     const near = this.food.getNearestItemPx(headPx, headPy, this.view.cell);

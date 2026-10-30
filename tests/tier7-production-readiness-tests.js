@@ -702,6 +702,122 @@ suite.test('T7.41: Molt Shield is a real power-up: spawns outside Zen, shows a H
   assertEqual(game.effects.shield, 0, 'Shield expires on its timer');
 });
 
+suite.test('T7.42: Magnet routes food around a wall instead of stranding it', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+  const apple = { type: 'apple', gx: 7, gy: 10, hop: 0, age: 0 };
+  food.items = [apple];
+  // Vertical wall at x = 8 from y = 9..11: straight and one-sideways paths are both blocked.
+  // The detour is 7 steps, so use a reach of 8.
+  const wall = (x, y) => x === 8 && y >= 9 && y <= 11;
+  const canLand = (x, y) => !wall(x, y);
+  for (let i = 0; i < 8 && food.items.length && !(apple.gx === 10 && apple.gy === 10); i++) {
+    food.magnetPull(head, canLand, false, false, null, null, null, 8);
+  }
+  assertEqual(apple.gx === 10 && apple.gy === 10, true, 'Apple walked around the wall into the head cell');
+});
+
+suite.test('T7.43: Magnet keeps pulling between snake steps (per-frame drift)', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+  const apple = { type: 'apple', gx: 4, gy: 10, hop: 0, age: 0 };
+  food.items = [apple];
+  for (let i = 0; i < 20; i++) food.magnetDrift(16, head, () => true, false, 6);
+  assert(apple.gx > 4, 'Apple moved without any snake step');
+  // Out of reach: nothing moves and nothing is recorded
+  const far = { type: 'apple', gx: 0, gy: 0, hop: 0, age: 0 };
+  food.items = [far];
+  food.magnetDrift(500, head, () => true, false, 6);
+  assertEqual(far.gx, 0, 'Food beyond reach is untouched');
+});
+
+suite.test('T7.44: Magnet steers idle insects toward the head', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  food.reset();
+  const head = { x: 10, y: 10 };
+  food.insects.push({ kind: 'beetle', fx: 6, fy: 10, tx: 6, ty: 10, prog: 1, dur: 320, dir: { x: 0, y: 1 }, age: 0, wing: 0, pop: 1 });
+  food._rebuildOcc();
+  const origRandom = Math.random;
+  Math.random = () => 0.1; // always take the magnet hop
+  try {
+    food.magnetDrift(16, head, () => true, false, 6);
+    food.update(16, { isFree: () => true, head });
+  } finally {
+    Math.random = origRandom;
+  }
+  assertEqual(food.insects[0].tx, 7, 'Beetle hops one cell toward the head');
+  assertEqual(food.insects[0].ty, 10, 'Beetle stays on the head row');
+});
+
+suite.test('T7.45: Power-up under the head no longer blocks the magnet', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  const h = game.snake.head;
+  game.powerups.field = [{ type: 'slow', gx: h.x, gy: h.y }];
+  assertEqual(game.isMagnetSafe(h.x, h.y), true, 'Head cell accepts food even over a power-up');
+  game.powerups.field = [{ type: 'slow', gx: h.x + 3, gy: h.y }];
+  assertEqual(game.isMagnetSafe(h.x + 3, h.y), false, 'Other power-up cells still block landing');
+});
+
+suite.test('T7.46: Repeat magnet pickups stack duration up to 15s; HUD fraction stays <= 1', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  const dur = BS.POWERUP_META.magnet.dur;
+  game.activatePower('magnet');
+  game.effects.magnet = 8000;
+  game.activatePower('magnet');
+  assertEqual(game.effects.magnet, Math.min(15000, 8000 + dur), 'Second pickup adds time');
+  game.activatePower('magnet');
+  assertEqual(game.effects.magnet, 15000, 'Stacking is capped at 15s');
+  game.updateHUDFrame(0, true);
+  const chip = game.ui.chips.get('magnet');
+  assert(chip, 'Magnet chip shown');
+});
+
+suite.test('T7.47: Magnet reach grows from 6 to 8 while active and resets after', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.stepMs = 1e9; // hold the snake still so it cannot crash mid-test
+  game.activatePower('magnet');
+  assertEqual(game.magnetReach(), 6, 'Starts at base reach');
+  for (let i = 0; i < 300; i++) {
+    game.effects.magnet = 9000;
+    game.update(16);
+    if (game.state !== 'playing') break;
+  }
+  assertEqual(game.magnetReach(), 8, 'Reach grows to +2 after ~4s');
+  game.effects.magnet = 0;
+  game.update(16);
+  assertEqual(game.magnetReach(), 6, 'Reach resets once the magnet ends');
+});
+
+suite.test('T7.48: Magnet-delivered food is eaten between steps and leaves a slurp', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.effects.magnet = 5000;
+  const h = game.snake.head;
+  game.food.items = [{ type: 'apple', gx: h.x, gy: h.y - 1, age: 0, hop: 0 }];
+  game.food._rebuildOcc();
+  const apples = game.run.apples;
+  game.acc = 0;
+  for (let i = 0; i < 10 && game.run.apples === apples; i++) game.magnetFrame(16);
+  assertEqual(game.run.apples, apples + 1, 'Apple eaten without a snake step');
+  assertEqual(game.food.slurps.length, 1, 'Slurp ghost spawned');
+  for (let i = 0; i < 20; i++) game.food.update(16, {});
+  assertEqual(game.food.slurps.length, 0, 'Slurp ghost finishes and is removed');
+});
+
 module.exports = suite;
 
 if (require.main === module) {
