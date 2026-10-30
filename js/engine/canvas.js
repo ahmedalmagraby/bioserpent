@@ -80,8 +80,12 @@ const CONFIG = {
   nearMissCooldownMs: 900,
   spawnMargin: 1,
   maxStepCatchup: 4,
+  graceMinMs: 140,     // crash forgiveness: min time the snake waits before a second fatal move
+  moltShed: 2,         // tail segments lost when the Molt Shield absorbs a crash
+  moltGhostMs: 1500,   // phase time after molting, to steer out of what was hit
   hudThrottleMs: 110,
-  dprMax: 3
+  // 3× phones push 2.25× the pixels of 2× for no visible gain on a 20-col board.
+  dprMax: 2
 };
 
 let REDUCED_MOTION = typeof matchMedia === 'function'
@@ -147,8 +151,7 @@ class View {
       this._ro = new ResizeObserver(() => {
         clearTimeout(rzTimer);
         rzTimer = setTimeout(() => {
-          this.resize();
-          if (BS.game && BS.game.onResize) BS.game.onResize();
+          if (this.resize() && BS.game && BS.game.onResize) BS.game.onResize();
         }, 16);
       });
       this._ro.observe(this.stage);
@@ -165,16 +168,23 @@ class View {
     const padB = parseFloat(cs.paddingBottom) || 0;
     const availW = Math.max(120, r.width - padL - padR);
     const availH = Math.max(120, r.height - padT - padB);
-    this.rows = rowsFor(availW, availH, this.forcedRows);
-    this.cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / this.rows)));
+    const rows = rowsFor(availW, availH, this.forcedRows);
+    const cell = Math.max(13, Math.floor(Math.min(availW / COLS, availH / rows)));
+    const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.dprMax);
+    // Reassigning canvas.width reallocates (and clears) the backing store, so
+    // skip it when nothing changed — mobile fires resize on every URL-bar move.
+    if (rows === this.rows && cell === this.cell && dpr === this.dpr && this.canvas.width) return false;
+    this.rows = rows;
+    this.cell = cell;
     this.w = this.cell * COLS;
     this.h = this.cell * this.rows;
-    this.dpr = Math.min(window.devicePixelRatio || 1, CONFIG.dprMax);
+    this.dpr = dpr;
     this.canvas.style.width = this.w + 'px';
     this.canvas.style.height = this.h + 'px';
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    return true;
   }
 
   cx(gx) { return (gx + 0.5) * this.cell; }

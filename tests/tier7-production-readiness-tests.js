@@ -523,6 +523,185 @@ suite.test('T7.29: Zen Mode power-up spawns exclude Ghost Phase and Prune Shroom
   assert(spawnedTypes.size > 0, 'Valid Zen power-ups spawned');
 });
 
+suite.test('T7.30: Time Attack egg never lowers the clock when it is above 90s', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('timeattack');
+  game.state = 'playing';
+  game.taTime = 120000;
+  game.consumeEgg();
+  assertEqual(game.taTime, 120000 + BS.CONFIG.taGoldenBonus, 'Egg adds the golden bonus on top of 120s');
+});
+
+suite.test('T7.31: Board rows stay locked for the whole run when the viewport aspect changes', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  const rows = game.view.rows;
+  const lenBefore = game.snake.length;
+  game.view.stage.setRect(400, 1600); // would ask for ROWS_MAX if unlocked
+  game.view.resize();
+  game.onResize();
+  assertEqual(game.view.rows, rows, 'Row count unchanged mid-run');
+  assertEqual(game.snake.length, lenBefore, 'Snake untouched by the resize');
+  game.gotoMenu();
+  assertEqual(game.view.forcedRows, null, 'Menu releases the row lock');
+});
+
+suite.test('T7.32: View.resize skips backing-store reallocation when nothing changed', () => {
+  const { BS } = loadGameScripts();
+  const v = BS.view;
+  v.resize();
+  assertEqual(v.resize(), false, 'Second identical resize is a no-op');
+  v.stage.setRect(500, 500);
+  assertEqual(v.resize(), true, 'Real size change still resizes');
+});
+
+suite.test('T7.33: Paused board renders once, then holds the frame', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.togglePause();
+  let draws = 0;
+  const orig = game.drawBackground.bind(game);
+  game.drawBackground = ctx => { draws++; orig(ctx); };
+  game.render();
+  game.render();
+  game.render();
+  assertEqual(draws, 1, 'Only the first paused frame is drawn');
+  game.togglePause();
+  game.render();
+  assertEqual(draws, 2, 'Resuming draws again');
+});
+
+// ---------- Crash forgiveness ----------
+function wallRun(BS) {
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.save.settings.walls = 'solid';
+  game.snake.reset(19, 5, BS.DIRS.right, 4); // head on the right edge, facing the wall
+  return game;
+}
+
+suite.test('T7.34: Forgiveness holds the snake in place instead of killing it', () => {
+  const { BS } = loadGameScripts();
+  const game = wallRun(BS);
+  const before = JSON.stringify({ cells: game.snake.cells, cX: game.snake.cX, cY: game.snake.cY, path: game.snake.path.length });
+  game.doStep();
+  assertEqual(game.state, 'playing', 'Still alive after the first fatal move');
+  assertEqual(JSON.stringify({ cells: game.snake.cells, cX: game.snake.cX, cY: game.snake.cY, path: game.snake.path.length }), before, 'Snake untouched while held');
+  game.snake.queueDir(BS.DIRS.down);
+  game.doStep();
+  assertEqual(game.state, 'playing', 'Late turn saves the run');
+  assertEqual(game.snake.head.y, 6, 'Snake moved down after turning');
+});
+
+suite.test('T7.35: Forgiveness is one grace per crash — staying on course still dies', () => {
+  const { BS } = loadGameScripts();
+  const game = wallRun(BS);
+  game.doStep();
+  game.doStep();
+  assertEqual(game.state, 'over', 'Second fatal move in a row is a real crash');
+});
+
+suite.test('T7.36: Forgiveness re-arms after a safe move, and can be turned off', () => {
+  const { BS } = loadGameScripts();
+  let game = wallRun(BS);
+  game.doStep();                       // held
+  game.snake.queueDir(BS.DIRS.down);
+  game.doStep();                       // safe move re-arms
+  game.snake.queueDir(BS.DIRS.right);
+  game.doStep();                       // wall again → held again
+  assertEqual(game.state, 'playing', 'Grace available again after a successful move');
+
+  game = wallRun(loadGameScripts().BS);
+  game.save.settings.forgive = false;
+  game.doStep();
+  assertEqual(game.state, 'over', 'Setting off: first fatal move kills');
+});
+
+suite.test('T7.37: Held snake waits at least graceMinMs, even during a speed burst', () => {
+  const { BS } = loadGameScripts();
+  const game = wallRun(BS);
+  game.burst = true;
+  game.startEase = 0;
+  const sms = game.stepMs * BS.CONFIG.burstMul;
+  game.acc = sms * 3.5; // catch-up would normally fire several steps at once
+  game.update(16);
+  assertEqual(game.state, 'playing', 'Catch-up steps do not run into the wall');
+  let waited = 0;
+  while (game.state === 'playing' && waited < 1000) { game.update(10); waited += 10; }
+  assert(waited >= BS.CONFIG.graceMinMs - 20, `Waited ${waited}ms before the fatal step`);
+  assertEqual(game.state, 'over', 'Ignoring the warning still ends the run');
+});
+
+suite.test('T7.38: Old saves get forgiveness on; an explicit off survives a reload', () => {
+  const { createBrowserEnv } = require('./test-env.js');
+  const legacyEnv = createBrowserEnv();
+  legacyEnv.localStorage.setItem('bioSerpentSave_v1', JSON.stringify({ best: { classic: 5 }, settings: { music: 0.5, sfx: 0.5 } }));
+  assertEqual(loadGameScripts(legacyEnv).BS.game.save.settings.forgive, true, 'Legacy save without the key defaults to on');
+
+  const offEnv = createBrowserEnv();
+  offEnv.localStorage.setItem('bioSerpentSave_v1', JSON.stringify({ best: { classic: 5 }, settings: { music: 0.5, sfx: 0.5, forgive: false } }));
+  assertEqual(loadGameScripts(offEnv).BS.game.save.settings.forgive, false, 'Explicit off is kept');
+});
+
+// ---------- Molt Shield ----------
+suite.test('T7.39: Molt Shield absorbs a wall crash, sheds 2 segments and is used up', () => {
+  const { BS } = loadGameScripts();
+  const game = wallRun(BS);
+  game.save.settings.forgive = false; // prove the shield alone saves the run
+  game.snake.reset(19, 5, BS.DIRS.right, 8);
+  game.activatePower('shield');
+  assert(game.effects.shield > 0, 'Shield active');
+  game.doStep();
+  assertEqual(game.state, 'playing', 'Shield saved the run');
+  assertEqual(game.snake.length, 8 - BS.CONFIG.moltShed, 'Shed 2 tail segments');
+  assertEqual(game.effects.shield, 0, 'Shield consumed');
+  assert(game.effects.ghost > 0, 'Brief phase granted after molting');
+  assertEqual(game.run.molts, 1, 'Molt counted on the run');
+});
+
+suite.test('T7.40: Molt Shield absorbs a rival collision', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.save.settings.rival = true;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.snake.reset(5, 5, BS.DIRS.right, 4);
+  game.rival.snake.reset(6, 2, BS.DIRS.up, 6); // body runs from y=2 down through (6,5)
+  game.rival.snake.rebuildOcc();
+  assert(game.rival.snake.isOccupied(6, 5), 'Rival body in the way');
+  game.activatePower('shield');
+  game.doStep();
+  assertEqual(game.state, 'playing', 'Shield saved the player from the rival');
+  assertEqual(game.effects.shield, 0, 'Shield consumed');
+});
+
+suite.test('T7.41: Molt Shield is a real power-up: spawns outside Zen, shows a HUD chip, expires', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  assert(BS.POWERUP_META.shield && BS.POWERUP_META.shield.dur > 0, 'Shield has metadata and a duration');
+  game.startRun('classic');
+  game.state = 'playing';
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) {
+    game.powerups.reset();
+    game.powerups.spawn((x, y) => game.isFreeCell(x, y));
+    if (game.powerups.field.length) seen.add(game.powerups.field[0].type);
+  }
+  assert(seen.has('shield'), 'Shield appears in the normal spawn pool');
+  game.activatePower('shield');
+  game.updateHUDFrame(0, true);
+  assert(game.ui.chips.has('shield'), 'HUD chip shown while active');
+  game.effects.shield = 10;
+  game.update(16);
+  assertEqual(game.effects.shield, 0, 'Shield expires on its timer');
+});
+
 module.exports = suite;
 
 if (require.main === module) {

@@ -98,6 +98,8 @@ suite.test('X5: Ghost Mode powerup + Obstacle vs Zen mode GhostSelf interaction 
   game.obstacles._rebuildGrid(20, 20);
   game.snake.reset(9, 10, BS.DIRS.right, 4);
   game.doStep(16);
+  assertEqual(game.state, 'playing', 'Crash forgiveness holds the first fatal move');
+  game.doStep(16);
   assertEqual(game.state, 'over', 'Zen mode snake dies when hitting rock obstacle');
 
   // Case B: Classic run with Ghost Phase powerup (ghost = true) -> passes through rock

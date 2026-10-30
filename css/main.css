@@ -2099,3 +2099,21 @@ input[type="range"]::-moz-range-thumb {
     background-color: #16241c;
   }
 }
+
+/* ---------- Touch-device performance ----------
+   The game canvas repaints every frame, so every backdrop-filter layered over
+   it (menu cards, d-pad, toasts, overlays, countdown) must be re-blurred every
+   frame too — the biggest GPU cost on phones. Swap the live blur for a denser
+   tint that reads the same. */
+@media (hover: none) and (pointer: coarse) {
+  :root {
+    --glass: rgba(22, 36, 29, 0.8);
+    --glass-strong: rgba(14, 25, 19, 0.9);
+  }
+  *, *::before, *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .screen.overlay { background: rgba(5, 10, 8, 0.84); }
+  #countdown { background: rgba(5, 12, 8, 0.45); }
+}

@@ -15,7 +15,7 @@ function defaultSave() {
     best: { classic: 0, timeattack: 0, zen: 0 },
     levelBest: {},
     stars: {},
-    settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true, rival: false },
+    settings: { music: 0.7, sfx: 0.9, muted: false, touch: 'auto', walls: 'solid', shake: true, flash: true, rival: false, forgive: true },
     daily: { key: '', best: 0, streak: 0, lastPlayed: '', countedKey: '' },
     history: {},
     skin: 'emerald',
@@ -83,6 +83,7 @@ function sanitizeSave(s, d) {
   settings.shake = settings.shake !== false;
   settings.flash = settings.flash !== false;
   settings.rival = !!settings.rival;
+  settings.forgive = settings.forgive !== false;
 
   const validBadges = Array.isArray(s.badges) ? s.badges.filter(b => typeof b === 'string') : [];
 
@@ -184,6 +185,9 @@ const BIOME_ORDER = ['rainforest', 'oasis', 'cavern', 'reef'];
 
 const DIR_VALUES = Object.values(DIRS);
 
+// Timed power-up effects, ticked down each frame and shown as HUD chips.
+const EFFECT_KEYS = ['magnet', 'slow', 'ghost', 'multi', 'shield'];
+
 let _lastBuzz = 0;
 function buzz(pattern) {
   const s = game.save.settings;
@@ -216,7 +220,7 @@ class Game {
     this.tInterp = 0;
     this.stepMs = CONFIG.stepMs.classic;
     this.burst = false;
-    this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0 };
+    this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0, shield: 0 };
     this.taTime = 0;
     this.combo = 0;
     this.comboTimer = 0;
@@ -846,6 +850,9 @@ class Game {
     this.ui.showScreen(null);
     this.ui.setDpadVisible(this.input.mode === 'dpad');
     this.view.resize();
+    // Lock the row count for the rest of the run: a mid-run row change (mobile
+    // URL bar, rotation) would clamp body cells onto each other and kill the snake.
+    this.view.forcedRows = this.view.rows;
     this.onResize();
     this.biomeKey = mode === 'level' ? lv.biome
       : mode === 'daily' ? ['rainforest', 'oasis', 'cavern', 'reef'][epochDays() % 4]
@@ -867,7 +874,10 @@ class Game {
     this.food.reset();
     this.powerups.reset();
     this.particles.clear();
-    this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0 };
+    this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0, shield: 0 };
+    this._graceUsed = false;
+    this._graceHold = false;
+    this._graceDelay = 0;
     this.stepMs = mode === 'level' ? lv.stepMs : CONFIG.stepMs[mode] || CONFIG.stepMs.classic;
     const runId = (this._runId = (this._runId || 0) + 1);
     this._nearMissCd = 0;
@@ -1206,7 +1216,9 @@ class Game {
     buzz([14, 20, 14]);
     this._queueEat(hx, hy, burstOpts, gain, hx, hy - this.view.cell * 0.7, '#f2e9cf', 18);
     if (this.mode === 'timeattack') {
-      this.taTime = Math.min(CONFIG.timeAttackMaxMs || 90000, this.taTime + (CONFIG.timeAttackBonusGoldenMs || CONFIG.taGoldenBonus || 4000));
+      // Uncapped like every other pickup — a 90s cap here used to *remove* time
+      // when the clock was already above 90s.
+      this.taTime += CONFIG.taGoldenBonus;
     }
     this.checkBadges();
     this.maybeNewBest();
@@ -1553,6 +1565,57 @@ class Game {
   }
 
 
+  // Molt Shield: absorb one fatal crash. The snake sheds its outer skin (loses
+  // tail segments), stays put this step, and gets a brief phase so it can steer
+  // out of the hazard or body it hit.
+  tryMolt(cause) {
+    if (!(this.effects.shield > 0)) return false;
+    this.effects.shield = 0;
+    const meta = POWERUP_META.shield;
+    const removed = this.snake.shrink(CONFIG.moltShed);
+    for (const c of removed) {
+      this.particles.burst(this.view.cx(c.x), this.view.cy(c.y), {
+        count: 8, colors: [this.snake.skin.c1, this.snake.skin.c2, meta.color], speed: 0.1, size: 2.2, life: 600
+      });
+    }
+    const h = this.snake.head;
+    const hx = this.view.cx(h.x);
+    const hy = this.view.cy(h.y);
+    this.particles.burst(hx, hy, { count: 22, colors: [meta.color, meta.spot, '#ffffff'], speed: 0.16, size: 2.4, life: 700, type: 'spark' });
+    this.particles.popup(hx, hy - this.view.cell * 0.8, 'MOLTED!', meta.color, 18);
+    if (this.save.settings.flash !== false) this.particles.flash(meta.color, 0.16);
+    if (this.save.settings.shake !== false) this.particles.shake(4);
+    this.effects.ghost = Math.max(this.effects.ghost, CONFIG.moltGhostMs);
+    this.run.molts = (this.run.molts || 0) + 1;
+    this.sound.molt(this._pan);
+    buzz([20, 30, 20]);
+    if (cause !== 'rival') this._holdSnake();
+    // The shield is separate from forgiveness: a wall still gets its grace step.
+    this._graceUsed = false;
+    return true;
+  }
+
+  // Crash forgiveness: the first fatal move is refused and the snake waits in
+  // place for a moment, so a late turn still saves it. One grace per crash —
+  // if the next move is still fatal, it counts.
+  tryForgive(cause) {
+    if (this.save.settings.forgive === false || this._graceUsed) return false;
+    this._graceUsed = true;
+    this._holdSnake();
+    const h = this.snake.head;
+    this.particles.burst(this.view.cx(h.x) + this.snake.dir.x * this.view.cell * 0.5, this.view.cy(h.y) + this.snake.dir.y * this.view.cell * 0.5, {
+      count: 6, colors: ['#ff6b6b', '#ffcdd2'], speed: 0.06, size: 1.6, life: 300
+    });
+    this.sound.brace(this._pan);
+    buzz(15);
+    return true;
+  }
+
+  _holdSnake() {
+    this._graceHold = true;
+    this._graceDelay = CONFIG.graceMinMs;
+  }
+
   doStep(dt = 16) {
     if (this.run) this.run.started = true;
     const env = {
@@ -1578,14 +1641,22 @@ class Game {
       buzz(18);
     }
     if (res.death) {
+      // step() commits nothing on a fatal move, so the snake can be held in place.
+      if (this.tryMolt(res.death) || this.tryForgive(res.death)) return;
       this.die(res.death);
       return;
     }
+    // A move went through: the next crash may be forgiven again.
+    this._graceUsed = false;
+    this._graceHold = false;
     const h = this.snake.head;
-    // Player head vs rival body/head — mutual destruction (skipped during Ghost Phase)
+    // Player head vs rival body/head — mutual destruction (skipped during Ghost Phase).
+    // The head has already moved here, so only the shield (not forgiveness) can save it.
     if (this.effects.ghost <= 0 && this.rival && this.rival.snake.isOccupied(h.x, h.y)) {
-      this.die('rival');
-      return;
+      if (!this.tryMolt('rival')) {
+        this.die('rival');
+        return;
+      }
     }
     // Consume any food items on head cell before magnet pull
     let item;
@@ -1742,7 +1813,7 @@ class Game {
       bar
     });
     const chips = [];
-    for (const key of ['magnet', 'slow', 'ghost', 'multi']) {
+    for (const key of EFFECT_KEYS) {
       if (this.effects[key] > 0) {
         const meta = POWERUP_META[key];
         chips.push({ key, label: meta.label.split(' ')[0], glyph: meta.short, color: meta.color, frac: this.effects[key] / meta.dur });
@@ -1890,7 +1961,7 @@ class Game {
     }
     if (this.state !== 'playing') return;
     if (this._nearMissCd > 0) this._nearMissCd = Math.max(0, this._nearMissCd - dt);
-    for (const k of ['magnet', 'slow', 'ghost', 'multi']) {
+    for (const k of EFFECT_KEYS) {
       if (this.effects[k] > 0) {
         this.effects[k] -= dt;
         if (this.effects[k] <= 0) {
@@ -1950,13 +2021,21 @@ class Game {
         this._inTick = false;
         return;
       }
+      if (this._graceDelay) {
+        // Held after a refused crash: wait at least graceMinMs (even mid-burst)
+        // and don't let catch-up steps fire straight into the hazard.
+        this.acc = Math.min(this.acc, 0) - Math.max(0, this._graceDelay - sms);
+        this._graceDelay = 0;
+        break;
+      }
     }
     this._flushTickEats();
     this._inTick = false;
     if (guard >= CONFIG.maxStepCatchup && this.acc > sms) {
       this.acc = 0;
     }
-    this.tInterp = clamp(this.acc / sms, 0, 1);
+    // While held, draw the head at rest on its cell instead of re-animating the last move.
+    this.tInterp = this._graceHold ? 1 : clamp(this.acc / sms, 0, 1);
     const near = this.food.getNearestItemPx(
       this.view.cx(this.snake.head.x),
       this.view.cy(this.snake.head.y),
@@ -2076,6 +2155,15 @@ class Game {
   render() {
     const ctx = this.view.ctx;
     const v = this.view;
+    // The paused board sits under a blurred overlay: draw it once and keep that
+    // frame, so neither the canvas nor the backdrop blur repaints every vsync.
+    if (this.state === 'paused') {
+      const key = v.cell + '|' + v.rows + '|' + v.dpr + '|' + this.biomeKey + '|' + this.save.settings.walls + '|' + !!this.rival;
+      if (this._pausedKey === key) return;
+      this._pausedKey = key;
+    } else {
+      this._pausedKey = null;
+    }
     ctx.clearRect(0, 0, v.w, v.h);
     ctx.save();
     ctx.translate(this.particles.shakeX, this.particles.shakeY);
@@ -2113,6 +2201,7 @@ class Game {
         lookX, lookY,
         alpha: this.dissolving ? this.deathFade : 1,
         magnet: this.effects.magnet > 0,
+        shield: this.effects.shield > 0,
         combo: this.combo
       });
     }
@@ -2134,7 +2223,8 @@ const PAUSE_TIPS = [
   '✨ Every 10 growth spawns a guaranteed bonus berry.',
   '⚡ Hold Shift (or the ⚡ button) for a burst of speed.',
   '📅 The Daily Challenge changes every day — keep your streak alive!',
-  '🧲 Magnet Spores drag nearby fruit straight to your jaws.'
+  '🧲 Magnet Spores drag nearby fruit straight to your jaws.',
+  '🛡 A Molt Shield turns one fatal crash into a shed skin.'
 ];
 
 const canvas = document.getElementById('game');
@@ -2216,6 +2306,7 @@ const ui = new UIManager({
       game.run = null;
       game.ui.setHUD(false);
       game.ui.showScreen('menu');
+      game.view.forcedRows = null;
       game.resetDemo();
     }
     game.save = defaultSave();
@@ -2281,6 +2372,7 @@ const ui = new UIManager({
         game.run = null;
         game.ui.setHUD(false);
         game.ui.showScreen('menu');
+        game.view.forcedRows = null;
         game.resetDemo();
       }
       game.save = sanitizeSave(obj, defaultSave());
@@ -2408,12 +2500,10 @@ loop.start();
 
 let _rzT = null;
 window.addEventListener('resize', () => {
-  view.resize();
-  game.onResize();
+  if (view.resize()) game.onResize();
   clearTimeout(_rzT);
   _rzT = setTimeout(() => {
-    view.resize();
-    game.onResize();
+    if (view.resize()) game.onResize();
   }, 150);
 });
 

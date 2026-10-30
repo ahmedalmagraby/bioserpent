@@ -256,6 +256,19 @@ class SoundManager {  constructor() {
     this.tone({ type: 'sine', f: 200, f2: 900, dur: 0.5, gain: 0.12, pan });
   }
 
+  // Crash forgiveness: a short low "thud" that says "turn now", not "you died"
+  brace(pan) {
+    this.tone({ type: 'square', f: 170, f2: 120, dur: 0.09, gain: 0.08, lp: 900, pan });
+  }
+
+  // Molt Shield absorbing a crash: rising shimmer over a soft rip
+  molt(pan) {
+    this.noise({ bp: 1800, bp2: 500, q: 2, dur: 0.22, gain: 0.16, pan });
+    [440, 587, 880].forEach((f, i) => {
+      this.tone({ type: 'triangle', f, dur: 0.4, gain: 0.1, t: this.time + 0.05 + i * 0.06, echo: true, pan });
+    });
+  }
+
   rivalDown(pan) {
     // Distinct descending sting so a rival death never reads as a glitch
     this.tone({ type: 'sawtooth', f: 520, f2: 130, dur: 0.42, gain: 0.14, lp: 1800, lp2: 300, pan });

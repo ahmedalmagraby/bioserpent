@@ -20,7 +20,8 @@
 - **Organic Ecosystem & Prey**:
   - Red Apples, Golden Berries, Rare Serpent Eggs (catch for high combo-multiplied points + magnet burst, or let hatch into a Golden Berry), Chasing Beetles, Bioluminescent Fireflies, and Evasive Dragonflies.
 - **Dynamic Power-ups**:
-  - Magnet Spores, Slow-Mo Amber, Ghost Phase (phases through walls, obstacles, own body, and Rival serpent), 2× Multipliers, and Prune Shrooms.
+  - Magnet Spores, Slow-Mo Amber, Ghost Phase (phases through walls, obstacles, own body, and Rival serpent), 2× Multipliers, Prune Shrooms, and the Molt Shield (survive one fatal crash by shedding 2 tail segments).
+- **Crash Forgiveness** (on by default, toggle in Settings): the snake pauses for a split second before a fatal move, so a late turn still saves you.
 - **Rich Visuals & Biomes**:
   - Emerald Rainforest, Golden Oasis, Bioluminescent Cavern, and Abyssal Reef.
   - 7 Unlockable serpent species (Emerald Python, Coral Serpent, Golden Sun Dragon, Abyssal Biolume, Albino Royal, Cosmic Aurora, Crimson Dragon).

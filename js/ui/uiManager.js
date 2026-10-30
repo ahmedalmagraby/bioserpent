@@ -260,7 +260,8 @@ class UIManager {
       walls: this.$('setWalls'),
       shake: this.$('setShake'),
       flash: this.$('setFlash'),
-      rival: this.$('setRival')
+      rival: this.$('setRival'),
+      forgive: this.$('setForgive')
     };
     s.music.addEventListener('input', () => {
       s.music.setAttribute('aria-valuenow', s.music.value);
@@ -282,6 +283,7 @@ class UIManager {
     if (s.shake) s.shake.addEventListener('change', () => this.h.onSettingsChange({ shake: s.shake.checked }));
     if (s.flash) s.flash.addEventListener('change', () => this.h.onSettingsChange({ flash: s.flash.checked }));
     if (s.rival) s.rival.addEventListener('change', () => this.h.onSettingsChange({ rival: s.rival.checked }));
+    if (s.forgive) s.forgive.addEventListener('change', () => this.h.onSettingsChange({ forgive: s.forgive.checked }));
   }
 
 
@@ -678,6 +680,8 @@ class UIManager {
     if (flashEl) flashEl.checked = s.flash !== false;
     const rivalEl = this.$('setRival');
     if (rivalEl) rivalEl.checked = !!s.rival;
+    const forgiveEl = this.$('setForgive');
+    if (forgiveEl) forgiveEl.checked = s.forgive !== false;
   }
 
   setSettingsTab(tab) {
@@ -973,6 +977,7 @@ class UIManager {
           <div class="guide-card"><div class="g-icon-box" style="color:#e07ec5;">👻</div><div><b>Ghost Phase [G]</b><p>Phase through your own body and all hazards — rocks, brambles, and spores — without taking damage.</p></div></div>
           <div class="guide-card"><div class="g-icon-box" style="color:#ff6b6b;">✖️</div><div><b>2× Multiplier [×2]</b><p>Doubles all score gains from prey and berries during its active duration.</p></div></div>
           <div class="guide-card"><div class="g-icon-box" style="color:#7ee08a;">✂️</div><div><b>Prune Shroom [−3]</b><p>Instantly trims 3 tail segments to squeeze safely through tight tunnels.</p></div></div>
+          <div class="guide-card"><div class="g-icon-box" style="color:#7cf2b5;">🛡</div><div><b>Molt Shield [◈]</b><p>Survive one fatal crash: you shed your skin (−2 tail) and phase briefly to slip away. Lasts 15s or until used.</p></div></div>
         </div>`;
     } else if (tab === 'hazards') {
       if (this._guideRaf) cancelAnimationFrame(this._guideRaf);

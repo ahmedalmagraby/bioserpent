@@ -707,13 +707,22 @@ class FoodManager {
       if (pop < 1) ctx.scale(pop, pop);
       if (n.kind === 'firefly') {
         const glow = 0.7 + 0.3 * Math.sin(time * 0.01 + n.wing);
-        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, cell * 0.8 * foodScale);
-        g.addColorStop(0, `rgba(212,255,120,${0.5 * glow})`);
-        g.addColorStop(1, 'rgba(212,255,120,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(0, 0, cell * 0.8 * foodScale, 0, TAU);
-        ctx.fill();
+        const gr = cell * 0.8 * foodScale;
+        const fsp = BS.glowSprite && BS.glowSprite('rgba(212,255,120,0.5)');
+        if (fsp) {
+          // Cached sprite + globalAlpha instead of a new gradient every frame
+          ctx.globalAlpha = glow;
+          ctx.drawImage(fsp, -gr, -gr, gr * 2, gr * 2);
+          ctx.globalAlpha = 1;
+        } else {
+          const g = ctx.createRadialGradient(0, 0, 0, 0, 0, gr);
+          g.addColorStop(0, `rgba(212,255,120,${0.5 * glow})`);
+          g.addColorStop(1, 'rgba(212,255,120,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(0, 0, gr, 0, TAU);
+          ctx.fill();
+        }
         const flap = Math.sin(n.wing) * 0.7;
         ctx.fillStyle = 'rgba(220,240,255,0.75)';
         for (const sWing of [-1, 1]) {

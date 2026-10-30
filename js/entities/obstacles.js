@@ -184,16 +184,17 @@ class Obstacles {
       ctx.fillStyle = '#274e36';
       ctx.strokeStyle = '#132b1d';
       ctx.lineWidth = cell * 0.03;
+      // Spikes never overlap, so one path gives the same pixels as 7 fill/stroke pairs.
+      ctx.beginPath();
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * TAU;
-        ctx.beginPath();
         ctx.moveTo(Math.cos(a - 0.28) * cell * 0.14, Math.sin(a - 0.28) * cell * 0.14);
         ctx.lineTo(Math.cos(a) * cell * 0.46, Math.sin(a) * cell * 0.46);
         ctx.lineTo(Math.cos(a + 0.28) * cell * 0.14, Math.sin(a + 0.28) * cell * 0.14);
         ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
       }
+      ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = '#3a6b4a';
       ctx.beginPath();
       ctx.arc(0, 0, cell * 0.15, 0, TAU);
@@ -248,13 +249,19 @@ class Obstacles {
       const hue = p.hue || (dir === 1 ? { main: '#ff9f43', glow: 'rgba(255,159,67,' } : { main: '#48dbfb', glow: 'rgba(72,219,251,' });
       ctx.save();
       ctx.translate(cx, cy);
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, cell * 0.75);
-      g.addColorStop(0, hue.glow + '0.5)');
-      g.addColorStop(1, hue.glow + '0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(0, 0, cell * 0.75, 0, TAU);
-      ctx.fill();
+      const pr = cell * 0.75;
+      const psp = BS.glowSprite && BS.glowSprite(hue.glow + '0.5)');
+      if (psp) {
+        ctx.drawImage(psp, -pr, -pr, pr * 2, pr * 2);
+      } else {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, pr);
+        g.addColorStop(0, hue.glow + '0.5)');
+        g.addColorStop(1, hue.glow + '0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, pr, 0, TAU);
+        ctx.fill();
+      }
       ctx.strokeStyle = hue.main;
       ctx.lineCap = 'round';
       for (let i = 0; i < 3; i++) {

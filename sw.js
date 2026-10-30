@@ -1,5 +1,5 @@
 // BioSerpent service worker — offline-first cache for PWA install.
-const CACHE = 'bioserpent-v32';
+const CACHE = 'bioserpent-v34';
 const ASSETS = [
   './',
   './index.html',
@@ -25,7 +25,10 @@ const ASSETS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    // cache: 'reload' skips the browser HTTP cache, which would otherwise hand
+    // the new worker the previous build's files.
+    caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -37,9 +40,27 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Cache-first, refresh in background (stale-while-revalidate).
+// The page itself is network-first: it names every asset by ?v=N, so serving a
+// stale copy pinned players to the old build until a second reload. Offline,
+// the cached page is used.
+function pageFirst(e) {
+  // no-cache: always revalidate with the server (HTTP caching would undo this)
+  return fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
+    if (res && res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(e.request, copy));
+    }
+    return res;
+  }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')));
+}
+
+// Assets: cache-first, refresh in background (stale-while-revalidate).
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  if (e.request.mode === 'navigate') {
+    e.respondWith(pageFirst(e));
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(hit => {
       const fetching = fetch(e.request).then(res => {

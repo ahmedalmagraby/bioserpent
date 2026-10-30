@@ -10,7 +10,8 @@ const POWERUP_META = {
   slow: { label: 'Slow-Mo Amber', short: 'S', color: '#ffc24b', cap: '#d98f2b', spot: '#ffe4ae', dur: 7000 },
   ghost: { label: 'Ghost Phase', short: 'G', color: '#cfd8ff', cap: '#8f9bd0', spot: '#eceffb', dur: 8000 },
   multi: { label: '2× Multiplier', short: '×2', color: '#ffd54a', cap: '#e0a52b', spot: '#fff3b0', dur: 9000 },
-  prune: { label: 'Prune Shroom', short: '−3', color: '#ff9ad5', cap: '#c85fa5', spot: '#ffd9ef', dur: 0 }
+  prune: { label: 'Prune Shroom', short: '−3', color: '#ff9ad5', cap: '#c85fa5', spot: '#ffd9ef', dur: 0 },
+  shield: { label: 'Molt Shield', short: '◈', color: '#7cf2b5', cap: '#2fae74', spot: '#d4ffe9', dur: 15000 }
 };
 
 const TYPES = Object.keys(POWERUP_META);

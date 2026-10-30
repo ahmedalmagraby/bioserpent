@@ -55,6 +55,7 @@ const SKINS = [
 ];
 
 const SAMPLE = 0.3;
+const BODY_LOD_PTS = 120;
 // Mirrors BS.CONFIG.comboMax (kept local to avoid a load-order dependency)
 const COMBO_MAX = 5;
 
@@ -207,18 +208,21 @@ class Snake {
         break;
       }
     }
+    // Nothing below is committed until the move is known to be survivable, so
+    // a fatal result leaves the snake exactly as it was (crash forgiveness and
+    // the Molt Shield rely on being able to hold the snake in place).
     let nx = this.cells[0].x + this.dir.x;
     let ny = this.cells[0].y + this.dir.y;
     let teleported = false;
     let cut = false;
-    this.cX += this.dir.x;
-    this.cY += this.dir.y;
-    if (this.justTele > 0) this.justTele--;
+    let cX = this.cX + this.dir.x;
+    let cY = this.cY + this.dir.y;
+    let justTele = this.justTele > 0 ? this.justTele - 1 : 0;
     const dest = env.portalAt ? env.portalAt(nx, ny) : null;
-    if (dest && this.justTele === 0) {
+    if (dest && justTele === 0) {
       nx = dest.x; ny = dest.y;
-      this.cX = nx; this.cY = ny;
-      this.justTele = 2;
+      cX = nx; cY = ny;
+      justTele = 2;
       teleported = true;
       cut = true;
     }
@@ -244,6 +248,9 @@ class Snake {
       if (ob) return { death: ob };
     }
 
+    this.cX = cX;
+    this.cY = cY;
+    this.justTele = justTele;
     this.cells.unshift({ x: nx, y: ny });
     this._occAdd(nx, ny);
     if (willGrow) this.growPending--;
@@ -482,6 +489,25 @@ class Snake {
         ctx.stroke();
         ctx.restore();
       }
+      if (state.shield) {
+        // Slowly turning hexagon: reads as "armoured" and never as a timer ring
+        const sr = cell * 0.82;
+        const rot = time * 0.0012;
+        ctx.save();
+        ctx.globalAlpha = baseA * (0.55 + 0.2 * Math.sin(time * 0.005));
+        ctx.strokeStyle = '#7cf2b5';
+        ctx.lineWidth = Math.max(1.5, cell * 0.06);
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const a = rot + k * (TAU / 6);
+          if (k === 0) ctx.moveTo(hx + Math.cos(a) * sr, hy + Math.sin(a) * sr);
+          else ctx.lineTo(hx + Math.cos(a) * sr, hy + Math.sin(a) * sr);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
       if (hasCombo) {
         ctx.globalAlpha = comboAlpha1;
         ctx.strokeStyle = comboStroke;
@@ -505,6 +531,13 @@ function segLine(ctx, a, b) {
   ctx.beginPath();
   ctx.moveTo(a.px, a.py);
   ctx.lineTo(b.px, b.py);
+  ctx.stroke();
+}
+
+function polyLine(ctx, pts, from, to) {
+  ctx.beginPath();
+  ctx.moveTo(pts[from].px, pts[from].py);
+  for (let j = from - 1; j >= to; j--) ctx.lineTo(pts[j].px, pts[j].py);
   ctx.stroke();
 }
 
@@ -533,18 +566,25 @@ function drawBody(ctx, pts, cell, skin, o) {
     ctx.stroke();
   }
   ctx.globalAlpha = alpha;
-  for (let i = n - 1; i > 0; i--) {
+  // Two strokes per spine segment is the dominant per-frame cost; past
+  // BODY_LOD_PTS points, stroke short polylines instead so long snakes
+  // (and their wrap copies) stay within a fixed draw-call budget.
+  const stride = n > BODY_LOD_PTS ? Math.ceil(n / BODY_LOD_PTS) : 1;
+  for (let i = n - 1; i > 0; i -= stride) {
+    const end = Math.max(0, i - stride);
     const u = i / (n - 1);
     const breathe = 1 + 0.03 * Math.sin(time * 0.0026 + u * 6);
     const w = maxW * taper(u) * breathe;
     ctx.strokeStyle = skin.outline;
     ctx.lineWidth = w + Math.max(2, cell * 0.09);
-    segLine(ctx, pts[i], pts[i - 1]);
+    if (stride === 1) segLine(ctx, pts[i], pts[end]);
+    else polyLine(ctx, pts, i, end);
     ctx.strokeStyle = skin.banded
       ? (Math.floor((n - i) / 4) % 2 ? skin.c1 : skin.c2)
       : ramp[Math.min(RAMP_STEPS - 1, ((1 - u) * (RAMP_STEPS - 1)) | 0)];
     ctx.lineWidth = w;
-    segLine(ctx, pts[i], pts[i - 1]);
+    if (stride === 1) segLine(ctx, pts[i], pts[end]);
+    else polyLine(ctx, pts, i, end);
   }
   ctx.globalAlpha = alpha * 0.38;
   ctx.strokeStyle = skin.belly;

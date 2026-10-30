@@ -339,7 +339,7 @@ function createBrowserEnv() {
     'btnOverShare', 'btnOverMenu', 'screen-complete', 'starsBox', 'completeScore', 'completeNextStar',
     'btnNext', 'btnReplay', 'btnCompleteMenu', 'modal-settings', 'btnCloseSettings', 'valMusic',
     'valSfx', 'setMusic', 'setSfx', 'setMute', 'setTouch', 'setWalls', 'setShake', 'setFlash',
-    'setRival', 'btnResetProgress', 'btnExportSave', 'btnImportSave', 'modal-guide', 'btnCloseGuide',
+    'setRival', 'setForgive', 'btnResetProgress', 'btnExportSave', 'btnImportSave', 'modal-guide', 'btnCloseGuide',
     'guideContent', 'modal-save', 'saveModalTitle', 'saveModalSub', 'saveJsonArea', 'btnSaveCopy',
     'btnSaveDownload', 'btnSaveApplyImport', 'btnCloseSaveModal', 'toasts', 'menuStats',
     'subClassic', 'subLevels', 'subTimeAttack', 'subZen', 'subDaily'
