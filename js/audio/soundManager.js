@@ -29,40 +29,51 @@ class SoundManager {  constructor() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
-      this.ctx = new AC();
-      
-      // Dynamic compressor to prevent digital clipping & balance master output
-      this.compressor = this.ctx.createDynamicsCompressor();
-      this.compressor.threshold.setValueAtTime(-14, this.ctx.currentTime);
-      this.compressor.knee.setValueAtTime(30, this.ctx.currentTime);
-      this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
-      this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
-      this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
-      this.compressor.connect(this.ctx.destination);
+      // Construction can throw (autoplay policy, too many contexts); the game
+      // then runs silently instead of losing the input that unlocked audio.
+      try {
+        this.ctx = new AC();
 
-      this.master = this.ctx.createGain();
-      this.master.connect(this.compressor);
-      this.musicBus = this.ctx.createGain();
-      this.musicBus.connect(this.master);
-      this.sfxBus = this.ctx.createGain();
-      this.sfxBus.connect(this.master);
-      const len = this.ctx.sampleRate;
-      this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-      const d = this.noiseBuf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      this.delay = this.ctx.createDelay(1);
-      this.delay.delayTime.value = 0.27;
-      const fb = this.ctx.createGain();
-      fb.gain.value = 0.34;
-      this.delay.connect(fb);
-      fb.connect(this.delay);
-      this.delayWet = this.ctx.createGain();
-      this.delayWet.gain.value = 0.25;
-      this.delay.connect(this.delayWet);
-      this.delayWet.connect(this.master);
+        // Dynamic compressor to prevent digital clipping & balance master output
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.setValueAtTime(-14, this.ctx.currentTime);
+        this.compressor.knee.setValueAtTime(30, this.ctx.currentTime);
+        this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
+        this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+        this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+        this.compressor.connect(this.ctx.destination);
+
+        this.master = this.ctx.createGain();
+        this.master.connect(this.compressor);
+        this.musicBus = this.ctx.createGain();
+        this.musicBus.connect(this.master);
+        this.sfxBus = this.ctx.createGain();
+        this.sfxBus.connect(this.master);
+        const len = this.ctx.sampleRate;
+        this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        this.delay = this.ctx.createDelay(1);
+        this.delay.delayTime.value = 0.27;
+        const fb = this.ctx.createGain();
+        fb.gain.value = 0.34;
+        this.delay.connect(fb);
+        fb.connect(this.delay);
+        this.delayWet = this.ctx.createGain();
+        this.delayWet.gain.value = 0.25;
+        this.delay.connect(this.delayWet);
+        this.delayWet.connect(this.master);
+      } catch (_) {
+        this.ctx = null;
+        this.master = this.musicBus = this.sfxBus = null;
+        return;
+      }
       this.applyVolumes();
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx.state === 'suspended') {
+      const p = this.ctx.resume();
+      if (p && p.catch) p.catch(() => {});
+    }
   }
 
   setVolumes(v) {

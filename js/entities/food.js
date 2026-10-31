@@ -1,7 +1,7 @@
 window.BS = window.BS || {};
 (function (BS) {
 "use strict";
-const { COLS, ROWS, TAU, rand, randi, pick, easeOutCubic, CONFIG } = BS;
+const { COLS, ROWS, TAU, rand, randi, pick, easeOutCubic, clamp, CONFIG } = BS;
 // Live board height (adaptive rows); falls back to the static default.
 const liveRows = () => (BS.view && BS.view.rows) || ROWS;
 
@@ -207,6 +207,8 @@ class FoodManager {
     const W = COLS;
     const R = liveRows();
     const field = new Map();
+    field.head = head;
+    field.wrap = wrap;
     field.set(FoodManager.occKey(head.x, head.y), 0);
     let frontier = [head.x, head.y];
     for (let d = 1; d <= reach && frontier.length; d++) {
@@ -219,6 +221,7 @@ class FoodManager {
             nx = (nx + W) % W;
             ny = (ny + R) % R;
           }
+          if (!wrap && (nx < 0 || nx >= W || ny < 0 || ny >= R)) continue;
           const k = FoodManager.occKey(nx, ny);
           if (field.has(k) || !canLand(nx, ny)) continue;
           field.set(k, d);
@@ -231,11 +234,18 @@ class FoodManager {
   }
 
   // Neighbour of (x, y) one step closer to the head, or null.
+  // Optimally selects the step that brings the item directly along the Euclidean
+  // line of attraction toward the snake head when multiple BFS options exist.
   _fieldStep(field, x, y, wrap, landFree) {
     const here = field.get(FoodManager.occKey(x, y));
     if (here === undefined || here === 0) return null;
     const W = COLS;
     const R = liveRows();
+    const head = field.head;
+    const wrapDist = wrap || !!(field && field.wrap);
+    let best = null;
+    let bestDist2 = Infinity;
+
     for (const c of CARDINALS) {
       let nx = x + c.x;
       let ny = y + c.y;
@@ -243,11 +253,27 @@ class FoodManager {
         nx = (nx + W) % W;
         ny = (ny + R) % R;
       }
-      if (field.get(FoodManager.occKey(nx, ny)) === here - 1 && (!landFree || !this.occupied(nx, ny))) {
-        return { x: nx, y: ny, sx: c.x, sy: c.y };
+      if (!wrap && (nx < 0 || nx >= W || ny < 0 || ny >= R)) continue;
+      const targetDist = field.get(FoodManager.occKey(nx, ny));
+      const isHead = targetDist === 0;
+      if (targetDist === here - 1 && (!landFree || isHead || !this.occupied(nx, ny))) {
+        if (!head) {
+          return { x: nx, y: ny, sx: c.x, sy: c.y };
+        }
+        let dx = head.x - nx;
+        let dy = head.y - ny;
+        if (wrapDist) {
+          if (Math.abs(dx) > W / 2) dx = W - Math.abs(dx);
+          if (Math.abs(dy) > R / 2) dy = R - Math.abs(dy);
+        }
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDist2) {
+          bestDist2 = d2;
+          best = { x: nx, y: ny, sx: c.x, sy: c.y };
+        }
       }
     }
-    return null;
+    return best;
   }
 
   _pullItem(it, step, particles, view) {
@@ -255,8 +281,8 @@ class FoodManager {
     // Visual sub-cell offset smoothing (only when not wrapping across edge seams)
     const didWrap = step.x !== it.gx + step.sx || step.y !== it.gy + step.sy;
     if (!didWrap) {
-      it.ox = (it.ox || 0) - step.sx;
-      it.oy = (it.oy || 0) - step.sy;
+      it.ox = clamp((it.ox || 0) - step.sx, -2.5, 2.5);
+      it.oy = clamp((it.oy || 0) - step.sy, -2.5, 2.5);
     } else {
       it.ox = 0;
       it.oy = 0;
@@ -268,61 +294,85 @@ class FoodManager {
     this._ver++;
     if (particles && view) {
       particles.burst(view.cx(step.x) - step.sx * view.cell * 0.35, view.cy(step.y) - step.sy * view.cell * 0.35, {
-        count: 1,
+        count: 2,
         colors: ['#69b7ff', '#bcdcff', '#ffffff'],
-        speed: 0.03, minSpeed: 0.01,
-        size: 1.6, life: 300, type: 'glow'
+        speed: 0.04, minSpeed: 0.015,
+        size: 1.8, life: 320, type: 'glow'
       });
     }
   }
 
   // Snake-step pull: every item in reach takes one guaranteed step toward the
-  // head, so the pull never falls behind the snake. `isBurst` is accepted
-  // for older callers; the pull no longer slows down at range.
+  // head, sorted by distance ascending so closer items clear the path for trailing ones.
   magnetPull(head, canLand, wrap = false, isBurst = false, particles = null, view = null, onPull = null, reach = MAGNET_REACH) {
     this._checkOccSync();
     const field = this.magnetField(head, canLand, wrap, reach);
     let movedAny = false;
-    for (let i = 0; i < this.items.length; i++) {
-      const it = this.items[i];
+    const sorted = this.items.length > 1 ? this.items.slice().sort((a, b) => {
+      const da = field.get(FoodManager.occKey(a.gx, a.gy)) ?? 999;
+      const db = field.get(FoodManager.occKey(b.gx, b.gy)) ?? 999;
+      return da - db;
+    }) : this.items;
+    for (let i = 0; i < sorted.length; i++) {
+      const it = sorted[i];
+      if (!field.get(FoodManager.occKey(it.gx, it.gy))) {
+        it.pullAcc = 0;
+        continue;
+      }
       const step = this._fieldStep(field, it.gx, it.gy, wrap, true);
       if (!step) continue;
       this._pullItem(it, step, particles, view);
-      it.pullAcc = 0;
+      it.pullAcc = (it.pullAcc || 0) % 1;
       movedAny = true;
+    }
+    for (let i = 0; i < this.insects.length; i++) {
+      const n = this.insects[i];
+      if (field.get(FoodManager.occKey(n.tx, n.ty))) {
+        n.magnet = field;
+        n.inMagnet = 1;
+      }
     }
     if (movedAny && typeof onPull === 'function') onPull();
     return field;
   }
 
   // Per-frame pull between snake steps: items glide in faster the closer they
-  // get. Also steers idle insects in reach, which half-resist. Returns the field for reuse.
-  magnetDrift(dt, head, canLand, wrap = false, reach = MAGNET_REACH, particles = null, view = null, onPull = null) {
+  // get. Boost scales pull rate so prey never lags behind a sprinting serpent.
+  magnetDrift(dt, head, canLand, wrap = false, reach = MAGNET_REACH, particles = null, view = null, onPull = null, isBurst = false) {
     this._checkOccSync();
     const field = this.magnetField(head, canLand, wrap, reach);
     let movedAny = false;
-    for (let i = 0; i < this.items.length; i++) {
-      const it = this.items[i];
+    const burstMul = isBurst ? 1.6 : 1.0;
+    const sorted = this.items.length > 1 ? this.items.slice().sort((a, b) => {
+      const da = field.get(FoodManager.occKey(a.gx, a.gy)) ?? 999;
+      const db = field.get(FoodManager.occKey(b.gx, b.gy)) ?? 999;
+      return da - db;
+    }) : this.items;
+    for (let i = 0; i < sorted.length; i++) {
+      const it = sorted[i];
       const d = field.get(FoodManager.occKey(it.gx, it.gy));
       if (!d) {
         it.pullAcc = 0;
         continue;
       }
       const near = reach > 1 ? 1 - (d - 1) / (reach - 1) : 1;
-      it.pullAcc = (it.pullAcc || 0) + dt * (0.005 + 0.010 * near);
+      it.pullAcc = (it.pullAcc || 0) + dt * (0.005 + 0.010 * near) * burstMul;
       if (it.pullAcc < 1) continue;
-      it.pullAcc -= 1;
       const step = this._fieldStep(field, it.gx, it.gy, wrap, true);
       if (!step) {
-        it.pullAcc = 0;
+        it.pullAcc = Math.min(it.pullAcc, 0.95);
         continue;
       }
+      it.pullAcc %= 1;
       this._pullItem(it, step, particles, view);
       movedAny = true;
     }
     for (let i = 0; i < this.insects.length; i++) {
       const n = this.insects[i];
-      if (field.get(FoodManager.occKey(n.tx, n.ty))) n.magnet = field;
+      if (field.get(FoodManager.occKey(n.tx, n.ty))) {
+        n.magnet = field;
+        n.inMagnet = 1;
+      }
     }
     if (movedAny && typeof onPull === 'function') onPull();
     return field;
@@ -420,6 +470,7 @@ class FoodManager {
     }
     for (const n of this.insects) {
       n.age += dt;
+      n.inMagnet = Math.max(0, (n.inMagnet || 0) - dt * 0.004);
       n.wing += dt * (n.kind === 'dragonfly' ? 0.08 : n.kind === 'firefly' ? 0.05 : 0.02);
       if (n.pop !== undefined && n.pop < 1) n.pop = Math.min(1, n.pop + dt / 220);
       if (n.prog < 1) {
@@ -545,15 +596,18 @@ class FoodManager {
   }
 
 
-  getNearestItemPx(px, py, cell) {
+  getNearestItemPx(px, py, cell, wrap = false) {
     if (this.insects.length === 0 &&
         this._cachedNearest &&
         this._cachedNearest.cell === cell &&
+        this._cachedNearest.wrap === wrap &&
         this._cachedNearest.ver === this._ver &&
         Math.abs(this._cachedNearest.px - px) < 1 &&
         Math.abs(this._cachedNearest.py - py) < 1) {
       return this._cachedNearest.res;
     }
+    const W = COLS * cell;
+    const H = liveRows() * cell;
     let best = null;
     let bd2 = Infinity;
     for (let i = 0; i < this.items.length; i++) {
@@ -562,29 +616,37 @@ class FoodManager {
       const oy = (it.oy || 0) * cell;
       const x = (it.gx + 0.5) * cell + ox;
       const y = (it.gy + 0.5) * cell + oy;
-      const dx = x - px;
-      const dy = y - py;
+      let dx = x - px;
+      let dy = y - py;
+      if (wrap) {
+        if (Math.abs(dx) > W / 2) dx = dx > 0 ? dx - W : dx + W;
+        if (Math.abs(dy) > H / 2) dy = dy > 0 ? dy - H : dy + H;
+      }
       const d2 = dx * dx + dy * dy;
       if (d2 < bd2) {
         bd2 = d2;
-        best = { x, y, d2, kind: it.type };
+        best = { x: px + dx, y: py + dy, d2, kind: it.type };
       }
     }
     for (let i = 0; i < this.insects.length; i++) {
       const p = this.insectPos(this.insects[i]);
       const x = (p.x + 0.5) * cell;
       const y = (p.y + 0.5) * cell;
-      const dx = x - px;
-      const dy = y - py;
+      let dx = x - px;
+      let dy = y - py;
+      if (wrap) {
+        if (Math.abs(dx) > W / 2) dx = dx > 0 ? dx - W : dx + W;
+        if (Math.abs(dy) > H / 2) dy = dy > 0 ? dy - H : dy + H;
+      }
       const d2 = dx * dx + dy * dy;
       if (d2 < bd2) {
         bd2 = d2;
-        best = { x, y, d2, kind: 'insect' };
+        best = { x: px + dx, y: py + dy, d2, kind: 'insect' };
       }
     }
     const res = best ? { x: best.x, y: best.y, d: Math.sqrt(best.d2), kind: best.kind } : null;
     if (this.insects.length === 0) {
-      this._cachedNearest = { px, py, cell, ver: this._ver, res };
+      this._cachedNearest = { px, py, cell, wrap, ver: this._ver, res };
     } else {
       this._cachedNearest = null;
     }
@@ -613,6 +675,17 @@ class FoodManager {
       ctx.beginPath();
       ctx.ellipse(view.cx(it.gx) + ox, view.cy(it.gy) + oy + cell * 0.3, cell * 0.24 * foodScale, cell * 0.07 * foodScale, 0, 0, TAU);
       ctx.fill();
+      if (it.hop > 0.02) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.65, it.hop * 0.65);
+        ctx.strokeStyle = '#69b7ff';
+        ctx.lineWidth = Math.max(1, cell * 0.04);
+        ctx.beginPath();
+        const rShimmer = cell * (0.34 * foodScale + 0.08 * (1 - it.hop));
+        ctx.arc(x, y, rShimmer, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
       if (it.type === 'apple') {
         const rApple = Math.min(cell * 0.44, cell * 0.32 * foodScale);
         // Soft ambient aura for high peripheral visibility on mobile
@@ -754,6 +827,17 @@ class FoodManager {
       ctx.save();
       ctx.translate(x, y);
       if (pop < 1) ctx.scale(pop, pop);
+      if (n.inMagnet > 0.02) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.55, n.inMagnet * 0.55);
+        ctx.strokeStyle = '#69b7ff';
+        ctx.lineWidth = Math.max(1, cell * 0.04);
+        ctx.beginPath();
+        const rMag = cell * (0.35 * foodScale + 0.06 * (1 - n.inMagnet));
+        ctx.arc(0, 0, rMag, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
       if (n.kind === 'firefly') {
         const glow = 0.7 + 0.3 * Math.sin(time * 0.01 + n.wing);
         const gr = cell * 0.8 * foodScale;

@@ -63,3 +63,6 @@ PROJECT.md
 TEST_INFRA.md
 TEST_READY.md
 ROADMAP.md
+
+# Playwright MCP artifacts
+.playwright-mcp/

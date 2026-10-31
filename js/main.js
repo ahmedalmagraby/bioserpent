@@ -199,11 +199,19 @@ const MAGNET_CAP_MS = 15000;
 let _lastBuzz = 0;
 // Gape toward food that is close AND in front of the head: full open one
 // cell ahead, nothing for food beside or behind. `cell` is the unit of d.
-function mouthTargetFor(near, hx, hy, dir, cell) {
-  const prox = clamp((cell * 2.6 - near.d) / (cell * 1.6), 0, 1);
+function mouthTargetFor(near, hx, hy, dir, cell, isMagnet = false) {
+  if (!near) return 0;
+  const maxRange = isMagnet ? cell * 3.2 : cell * 2.6;
+  const prox = clamp((maxRange - near.d) / (cell * 1.6), 0, 1);
   if (!prox || !dir) return prox;
   if (near.d < cell * 0.35) return prox;
   const facing = (dir.x * (near.x - hx) + dir.y * (near.y - hy)) / near.d;
+  if (isMagnet) {
+    // When magnetic pull is active, the mouth opens for prey approaching from all angles,
+    // biased smoothly toward the facing direction without abrupt step cutoff.
+    const omniGape = 0.65 + 0.35 * Math.max(0, facing);
+    return prox * omniGape;
+  }
   return prox * clamp((facing - 0.1) / 0.8, 0, 1);
 }
 
@@ -239,6 +247,7 @@ class Game {
     this.stepMs = CONFIG.stepMs.classic;
     this.burst = false;
     this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0, shield: 0 };
+    this._magnetMs = 0;
     this.taTime = 0;
     this.combo = 0;
     this.comboTimer = 0;
@@ -896,6 +905,7 @@ class Game {
     this.powerups.reset();
     this.particles.clear();
     this.effects = { magnet: 0, slow: 0, ghost: 0, multi: 0, shield: 0 };
+    this._magnetMs = 0;
     this._graceUsed = false;
     this._graceHold = false;
     this._graceDelay = 0;
@@ -1264,6 +1274,8 @@ class Game {
       this.particles.popup(this._tickPopup.x, this._tickPopup.y, text, this._tickPopup.color, this._tickPopup.size);
       this._tickBurst = null;
       this._tickPopup = null;
+      this._eatsThisTick = 0;
+      this._tickPoints = 0;
     }
   }
 
@@ -1646,6 +1658,7 @@ class Game {
   }
 
   magnetReach() {
+    if (!(this.effects.magnet > 0)) return MAGNET_BASE_REACH;
     return MAGNET_BASE_REACH + Math.round(2 * clamp((this._magnetMs || 0) / MAGNET_GROW_MS, 0, 1));
   }
 
@@ -1653,14 +1666,32 @@ class Game {
     if (this.sound && typeof this.sound.magnetTick === 'function') this.sound.magnetTick();
   }
 
+  _onEatArrival() {
+    if (!this.run) return;
+    if (this.mode === 'level' && this.run.apples >= LEVELS[this.levelIdx].goalApples) {
+      this.completeLevel();
+    }
+  }
+
   // Food that a magnet delivered to the head cell: swallow it with a slurp.
   eatMagnetArrivals() {
     const h = this.snake.head;
     let item;
+    const wasInTick = this._inTick;
+    this._inTick = true;
+    let ateAny = false;
     while ((item = this.food.collideCell(h.x, h.y))) {
       this.food.slurp(item);
       if (item.type === 'egg') this.consumeEgg();
       else this.consume(item.type === 'apple' ? 'apple' : 'golden');
+      ateAny = true;
+    }
+    this._inTick = wasInTick;
+    if ((ateAny || this._eatsThisTick > 0) && !this._inTick) {
+      this._flushTickEats();
+    }
+    if (ateAny && !this._inStep) {
+      this._onEatArrival();
     }
   }
 
@@ -1668,11 +1699,19 @@ class Game {
   // rather than only moving when the snake does.
   magnetFrame(dt) {
     const h = this.snake.head;
+    const wasInTick = this._inTick;
+    this._inTick = true;
     this.food.magnetDrift(dt, h, (x, y) => this.isMagnetSafe(x, y), this.wrapsEdges(),
-      this.magnetReach(), this.particles, this.view, () => this._magnetTick());
+      this.magnetReach(), this.particles, this.view, () => this._magnetTick(), this.burst);
+    let ins;
+    while ((ins = this.food.insectHit(h.x, h.y))) {
+      this.consumeInsect(ins.kind);
+    }
+    this._inTick = wasInTick;
     this.eatMagnetArrivals();
-    const ins = this.food.insectHit(h.x, h.y);
-    if (ins) this.consumeInsect(ins.kind);
+    if (!this._inTick) {
+      this._flushTickEats();
+    }
   }
 
   doStep(dt = 16) {
@@ -1715,6 +1754,13 @@ class Game {
         return;
       }
     }
+    this._pan = (this.view.cx(h.x) / this.view.w) * 2 - 1;
+    const pw = this.powerups.collide(h.x, h.y);
+    if (pw) this.activatePower(pw.type);
+    const wasInTick = this._inTick;
+    const wasInStep = this._inStep;
+    this._inTick = true;
+    this._inStep = true;
     // Consume any food items on head cell before magnet pull
     let item;
     while ((item = this.food.collideCell(h.x, h.y))) {
@@ -1726,11 +1772,15 @@ class Game {
         this.particles, this.view, () => this._magnetTick(), this.magnetReach());
       this.eatMagnetArrivals();
     }
-    const ins = this.food.insectHit(h.x, h.y);
-    if (ins) this.consumeInsect(ins.kind);
-    this._pan = (this.view.cx(h.x) / this.view.w) * 2 - 1;
-    const pw = this.powerups.collide(h.x, h.y);
-    if (pw) this.activatePower(pw.type);
+    let ins;
+    while ((ins = this.food.insectHit(h.x, h.y))) {
+      this.consumeInsect(ins.kind);
+    }
+    this._inTick = wasInTick;
+    this._inStep = wasInStep;
+    if (!this._inTick) {
+      this._flushTickEats();
+    }
     const newLen = this.snake.length;
     if (newLen !== this.lastLen) {
       if (this.milestone && newLen >= this.milestone) {
@@ -2005,7 +2055,6 @@ class Game {
     }
     if (this.state !== 'playing') return;
     if (this._nearMissCd > 0) this._nearMissCd = Math.max(0, this._nearMissCd - dt);
-    this._magnetMs = this.effects.magnet > 0 ? (this._magnetMs || 0) + dt : 0;
     for (const k of EFFECT_KEYS) {
       if (this.effects[k] > 0) {
         this.effects[k] -= dt;
@@ -2015,6 +2064,7 @@ class Game {
         }
       }
     }
+    this._magnetMs = this.effects.magnet > 0 ? (this._magnetMs || 0) + dt : 0;
     const effDt = dt * (this.effects.slow > 0 ? CONFIG.slowMul : 1);
     this.run.time += dt;
 
@@ -2087,8 +2137,8 @@ class Game {
     }
     const headPx = this.view.cx(this.snake.head.x);
     const headPy = this.view.cy(this.snake.head.y);
-    const near = this.food.getNearestItemPx(headPx, headPy, this.view.cell);
-    const mouthTarget = near ? mouthTargetFor(near, headPx, headPy, this.snake.dir, this.view.cell) : 0;
+    const near = this.food.getNearestItemPx(headPx, headPy, this.view.cell, this.wrapsEdges());
+    const mouthTarget = near ? mouthTargetFor(near, headPx, headPy, this.snake.dir, this.view.cell, this.effects.magnet > 0) : 0;
     this.snake.tick(dt, mouthTarget, near && near.kind);
     this.food.update(effDt, { isFree: (x, y) => this.isFreeCell(x, y), view: this.view, particles: this.particles, head: this.snake.head });
     if (!this.food.items.some(i => i.type === 'apple' && i.gy < liveRows() && i.gx < COLS && i.gy >= 0 && i.gx >= 0)) {
@@ -2223,7 +2273,7 @@ class Game {
       const dh = this.demoSnake.headPos(v, dt2);
       const dwx = ((dh.px % v.w) + v.w) % v.w;
       const dwy = ((dh.py % v.h) + v.h) % v.h;
-      const dnear = this.demoFood.getNearestItemPx(dwx, dwy, v.cell);
+      const dnear = this.demoFood.getNearestItemPx(dwx, dwy, v.cell, true);
       this.demoFood.render(ctx, v, this.time);
       this.demoSnake.render(ctx, v, dt2, this.time, {
         ghost: false,
@@ -2238,7 +2288,7 @@ class Game {
       const hp = this.snake.headPos(v, this.tInterp);
       const wx = ((hp.px % v.w) + v.w) % v.w;
       const wy = ((hp.py % v.h) + v.h) % v.h;
-      const near = this.food.getNearestItemPx(wx, wy, v.cell);
+      const near = this.food.getNearestItemPx(wx, wy, v.cell, this.wrapsEdges());
       if (near && near.d < v.cell * 8) {
         lookX = near.x;
         lookY = near.y;

@@ -874,14 +874,15 @@ suite.test('T5.8.2: Complete audit of ASSETS list confirms 100% of files exist o
   }
 });
 
-suite.test('T5.8.3: Service Worker fetch handler performs exact cache matching (honoring ?v=N query strings without ignoreSearch)', () => {
+suite.test('T5.8.3: Service Worker fetch handler performs exact cache matching first (ignoreSearch only as offline fallback)', () => {
   const root = path.resolve(__dirname, '..');
   const swCode = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 
-  assert(
-    swCode.includes('caches.match(e.request)') && !swCode.includes('ignoreSearch: true'),
-    'sw.js fetch handler specifies caches.match(e.request) without ignoreSearch: true'
-  );
+  assert(swCode.includes('caches.match(e.request).then'), 'sw.js fetch handler looks up the exact versioned request first');
+  const fallback = swCode.indexOf('function offlineAsset');
+  const loose = swCode.indexOf('ignoreSearch: true');
+  assert(loose === -1 || (fallback !== -1 && loose > fallback && loose < swCode.indexOf('}', loose) + 200),
+    'ignoreSearch is confined to the offline fallback');
 });
 
 suite.test('T5.8.4: Service Worker activation handler deletes all stale cache versions while preserving active CACHE', () => {

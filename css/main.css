@@ -392,6 +392,7 @@ body.dpad-open #stage {
   gap: 14px;
   padding: max(20px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
   animation: fadeIn 0.3s ease;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -1010,6 +1011,25 @@ body.dpad-open #stage {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
+}
+.pause-stats .stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 58px;
+  padding: 6px 10px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+}
+.pause-stats .stat b { font-size: 17px; font-weight: 800; line-height: 1.1; }
+.pause-stats .stat small {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .new-best { color: var(--gold); font-weight: 800; text-shadow: 0 0 14px rgba(255, 213, 74, 0.6); }
 
@@ -1867,7 +1887,9 @@ input[type="range"]::-moz-range-thumb {
   .card-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .guide-content { max-height: 44vh; }
   .setting-row input[type="range"] { width: min(42vw, 130px); }
-  .menu-container { width: min(360px, 94vw); gap: 9px; }
+  /* Narrower side gutters so the menu fits the padded box (no sideways scroll) */
+  .screen { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .menu-container { width: 100%; max-width: 360px; gap: 9px; }
   .mode-card.hero-mode { padding: 10px 14px; }
   .mode-title { font-size: 14.5px; }
   .mode-desc { font-size: 10px; }

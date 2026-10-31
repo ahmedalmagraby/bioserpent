@@ -494,14 +494,54 @@ suite.test('T7.27: BUG-27 — unlockOnce removes all listeners on first event to
   assertEqual(startMusicCalls, 1, 'startMusic called exactly once across keydown + pointerdown');
 });
 
-suite.test('T7.28: BUG-28 — Service Worker fetch handler performs exact cache matching honoring ?v=N queries', () => {
+// Runs sw.js against an in-memory cache and a switchable network, then
+// returns what the fetch handler answers for `url`.
+async function swFetch(entries, url, online) {
   const root = path.resolve(__dirname, '..');
   const swCode = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  const listeners = {};
+  const store = new Map(entries);
+  const bare = u => u.split('?')[0];
+  const caches = {
+    match: async (req, opts) => {
+      const u = typeof req === 'string' ? req : req.url;
+      if (store.has(u)) return store.get(u);
+      if (opts && opts.ignoreSearch) {
+        for (const [k, v] of store) if (bare(k) === bare(u)) return v;
+      }
+      return undefined;
+    },
+    open: async () => ({ put: async () => {}, addAll: async () => {} }),
+    keys: async () => [],
+    delete: async () => true
+  };
+  const self = { addEventListener: (t, fn) => { listeners[t] = fn; }, skipWaiting() {}, clients: { claim() {} } };
+  const fetch = async () => {
+    if (!online) throw new Error('offline');
+    return { ok: true, body: 'network', clone() { return this; } };
+  };
+  const Response = function (body, init) { this.body = body; this.status = init && init.status; };
+  new Function('self', 'caches', 'fetch', 'Response', 'Request', 'location', swCode)(
+    self, caches, fetch, Response, function (u) { this.url = u; }, { origin: 'http://x' });
+  let answer;
+  listeners.fetch({ request: { method: 'GET', mode: 'no-cors', url }, respondWith(p) { answer = p; } });
+  return answer;
+}
 
-  assert(
-    swCode.includes('caches.match(e.request)') && !swCode.includes('ignoreSearch: true'),
-    'sw.js fetch handler specifies caches.match(e.request) without ignoreSearch: true'
-  );
+suite.test('T7.28: BUG-28 — Service Worker never serves a stale ?v=N asset online, yet still works offline', async () => {
+  const stale = { ok: true, body: 'v42' };
+  // Online with only an older version cached: the new version comes from the network.
+  let res = await swFetch([['http://x/js/main.js?v=42', stale]], 'http://x/js/main.js?v=43', true);
+  assertEqual(res.body, 'network', 'online miss on ?v=43 fetches instead of serving cached ?v=42');
+  // Exact versioned hit is served from cache.
+  res = await swFetch([['http://x/js/main.js?v=43', { ok: true, body: 'v43' }]], 'http://x/js/main.js?v=43', true);
+  assertEqual(res.body, 'v43', 'exact versioned hit served from cache');
+  // Offline after a first install: only the bare precached path exists.
+  res = await swFetch([['http://x/js/main.js', { ok: true, body: 'precached' }]], 'http://x/js/main.js?v=43', false);
+  assertEqual(res.body, 'precached', 'offline falls back to the precached bare path');
+  // Offline with nothing cached: a clean 504, not a thrown error.
+  res = await swFetch([], 'http://x/js/main.js?v=43', false);
+  assertEqual(res.status, 504, 'offline miss yields 504');
 });
 
 suite.test('T7.29: Zen Mode power-up spawns exclude Ghost Phase and Prune Shroom (only magnet, slow, multi)', () => {
@@ -846,6 +886,335 @@ suite.test('T7.49: HUD shows the combo multiplier, a mode objective, new-best st
   game.updateHUDFrame(0, true);
   assert(ui.el.hudStats.className.includes('timer'), 'Time Attack objective is the clock');
   assert(ui.el.combo.classList.contains('vis-hidden'), 'No combo badge without a combo');
+});
+
+suite.test('T7.50: Magnet allows multiple items to enter the head cell simultaneously without blockage', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.effects.magnet = 5000;
+  const h = game.snake.head;
+
+  // 3 apples surrounding the head from top, bottom, and front (right)
+  game.food.items = [
+    { type: 'apple', gx: h.x, gy: h.y - 1, age: 0, hop: 0 },
+    { type: 'apple', gx: h.x, gy: h.y + 1, age: 0, hop: 0 },
+    { type: 'apple', gx: h.x + 1, gy: h.y, age: 0, hop: 0 }
+  ];
+  game.food._rebuildOcc();
+
+  const prevApples = game.run.apples;
+  game.food.magnetPull(h, (x, y) => game.isMagnetSafe(x, y), false, false, null, null, null, 6);
+  game.eatMagnetArrivals();
+
+  assertEqual(game.food.items.length, 0, 'All 3 adjacent apples entered head cell and were consumed');
+  assertEqual(game.run.apples, prevApples + 3, 'Run recorded all 3 consumed apples');
+});
+
+suite.test('T7.51: Magnet conveyor-belt streams inline items without trailing blockage', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+
+  // Three inline apples in reverse order in items array [dist 3, dist 2, dist 1]
+  const a3 = { type: 'apple', gx: 10, gy: 7, age: 0, hop: 0 };
+  const a2 = { type: 'apple', gx: 10, gy: 8, age: 0, hop: 0 };
+  const a1 = { type: 'apple', gx: 10, gy: 9, age: 0, hop: 0 };
+  food.items = [a3, a2, a1];
+  food._rebuildOcc();
+
+  food.magnetPull(head, () => true, false, false, null, null, null, 6);
+
+  assertEqual(a1.gy, 10, 'Closest apple advanced into the head');
+  assertEqual(a2.gy, 9, 'Middle apple advanced into vacated cell 9');
+  assertEqual(a3.gy, 8, 'Furthest apple advanced into vacated cell 8');
+});
+
+suite.test('T7.52: Magnet chooses direct Euclidean line of sight when multiple BFS paths are equal', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+  // Apple at (12, 15): dx=2, dy=5. BFS distance=7.
+  // Neighbor (12, 14) has Euclidean d^2 = 2^2 + 4^2 = 20.
+  // Neighbor (11, 15) has Euclidean d^2 = 1^2 + 5^2 = 26.
+  const apple = { type: 'apple', gx: 12, gy: 15, age: 0, hop: 0 };
+  food.items = [apple];
+  food._rebuildOcc();
+
+  const field = food.magnetField(head, () => true, false, 8);
+  const step = food._fieldStep(field, apple.gx, apple.gy, false, true);
+
+  assertEqual(step.x, 12, 'Prefers direct line step along dominant vertical axis');
+  assertEqual(step.y, 14, 'Steps UP to y=14 rather than sideways to x=11');
+});
+
+suite.test('T7.53: MagnetField strictly confines search to board bounds when wrap is false', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 1, y: 1 };
+  // canLand callback that blindly returns true even for negative or out-of-bound coords
+  const recklessCanLand = () => true;
+
+  const field = food.magnetField(head, recklessCanLand, false, 8);
+  for (const [k] of field) {
+    const x = k % 4096;
+    const y = Math.floor(k / 4096);
+    assert(x >= 0 && x < BS.COLS, `Field coordinate x=${x} within board width`);
+    assert(y >= 0 && y < 40, `Field coordinate y=${y} within board height`);
+  }
+});
+
+suite.test('T7.54: Magnet boost scaling accelerates drift rate during snake sprint', () => {
+  const { BS } = loadGameScripts();
+  const foodNormal = new BS.FoodManager();
+  const foodBoost = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+
+  const appleNorm = { type: 'apple', gx: 6, gy: 10, age: 0, hop: 0, pullAcc: 0 };
+  const appleBoost = { type: 'apple', gx: 6, gy: 10, age: 0, hop: 0, pullAcc: 0 };
+  foodNormal.items = [appleNorm];
+  foodNormal._rebuildOcc();
+  foodBoost.items = [appleBoost];
+  foodBoost._rebuildOcc();
+
+  foodNormal.magnetDrift(40, head, () => true, false, 6, null, null, null, false);
+  foodBoost.magnetDrift(40, head, () => true, false, 6, null, null, null, true);
+
+  assert(appleBoost.pullAcc > appleNorm.pullAcc, 'Boosted drift accumulates faster than normal drift');
+  assert(Math.abs(appleBoost.pullAcc / appleNorm.pullAcc - 1.6) < 0.05, 'Boosted drift scales by ~1.6x');
+});
+
+suite.test('T7.55: Magnet simultaneous arrivals batch clean single popup score without points leak', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  game.effects.magnet = 5000;
+  const h = game.snake.head;
+
+  game.food.items = [
+    { type: 'apple', gx: h.x, gy: h.y, age: 0, hop: 0 },
+    { type: 'apple', gx: h.x, gy: h.y, age: 0, hop: 0 }
+  ];
+  game.food._rebuildOcc();
+
+  let popups = [];
+  game.particles.popup = (x, y, text, color, size) => {
+    popups.push({ x, y, text, color, size });
+  };
+
+  game.eatMagnetArrivals();
+
+  assertEqual(popups.length, 1, 'Batched into exactly one score popup');
+  assertEqual(popups[0].text, '+23 (×2)', 'Popup accurately sums both apples with combo multiplier');
+  assertEqual(game._eatsThisTick, 0, '_eatsThisTick cleanly reset to 0');
+  assertEqual(game._tickPoints, 0, '_tickPoints cleanly reset to 0');
+});
+
+suite.test('T7.56: Magnet drift arrival completing campaign level goal transitions to completeLevel immediately', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('level', 0);
+  game.state = 'playing';
+  game.effects.magnet = 5000;
+  const h = game.snake.head;
+  const goal = BS.LEVELS[0].goalApples;
+  game.run.apples = goal - 1;
+
+  // Food item lands on head during magnet drift
+  game.food.items = [{ type: 'apple', gx: h.x, gy: h.y, age: 0, hop: 0 }];
+  game.food._rebuildOcc();
+
+  game.magnetFrame(16);
+
+  assertEqual(game.run.apples, goal, 'Goal apple was consumed');
+  assert(game.state !== 'playing', 'Game transitioned out of playing state upon reaching goal');
+});
+
+suite.test('T7.57: Multi-step magnet pull retains smooth sub-cell offset continuity without snapping', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+  const apple = { type: 'apple', gx: 10, gy: 7, age: 0, hop: 0, ox: 0, oy: 0, pullAcc: 0 };
+  food.items = [apple];
+  food._rebuildOcc();
+
+  // Step 1 pull
+  food.magnetPull(head, () => true, false, false);
+  assertEqual(apple.gy, 8, 'Advanced to gy=8');
+  assertEqual(apple.oy, -1, 'Initial offset is -1 cell');
+
+  // Simulate partial visual decay of 30% (oy becomes -0.7, worldY is 8 + (-0.7) = 7.3)
+  apple.oy = -0.7;
+  const worldYBefore = apple.gy + apple.oy;
+
+  // Step 2 pull immediately follows
+  food.magnetPull(head, () => true, false, false);
+  assertEqual(apple.gy, 9, 'Advanced to gy=9');
+  const worldYAfter = apple.gy + apple.oy;
+  assert(Math.abs(worldYAfter - worldYBefore) < 0.001, 'Visual world position is continuous across steps without snapping');
+  assertEqual(apple.oy, -1.7, 'Offset retains accumulated distance (-1.7) rather than snapping to -1.0');
+});
+
+suite.test('T7.58: Toroidal wrapped prey triggers mouth gaping and nearest detection across screen borders', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('zen'); // Zen wraps edges
+  game.state = 'playing';
+  game.effects.magnet = 5000;
+  const W = BS.COLS;
+  const cell = game.view.cell;
+
+  // Place snake head at x=0, heading left (facing the wrap seam)
+  game.snake.reset(0, 10, BS.DIRS.left, 5);
+  const headPx = game.view.cx(0);
+  const headPy = game.view.cy(10);
+
+  // Place apple at x=W-1, y=10 (1 tile away across wrap seam)
+  game.food.items = [{ type: 'apple', gx: W - 1, gy: 10, age: 0, hop: 0 }];
+  game.food._rebuildOcc();
+
+  const near = game.food.getNearestItemPx(headPx, headPy, cell, true);
+  assert(near !== null, 'Found nearest prey across wrap');
+  assert(Math.abs(near.d - cell) < 1, 'Prey distance is recognized as 1 cell away across toroidal seam');
+
+  for (let i = 0; i < 10; i++) game.update(16);
+  assert(game.snake.mouth > 0.1, 'Snake mouth actively gapes toward prey arriving across wrap seam');
+});
+
+suite.test('T7.59: Multiple insect hits in doStep are all consumed in the same step', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  const h = game.snake.head;
+  const destX = h.x + game.snake.dir.x;
+  const destY = h.y + game.snake.dir.y;
+
+  // Place 2 insects directly on step destination cell
+  game.food.insects = [
+    { kind: 'firefly', fx: destX, fy: destY, tx: destX, ty: destY, prog: 1, age: 0, wing: 0 },
+    { kind: 'beetle', fx: destX, fy: destY, tx: destX, ty: destY, prog: 1, age: 0, wing: 0 }
+  ];
+  game.food._rebuildOcc();
+
+  const prevInsects = game.run.insects;
+  game.doStep(16);
+
+  assertEqual(game.run.insects, prevInsects + 2, 'Both insects were consumed in doStep');
+  assertEqual(game.food.insects.length, 0, 'No insects remain on head');
+});
+
+suite.test('T7.60: Magnet drift preserves primed progress when target cell is temporarily occupied', () => {
+  const { BS } = loadGameScripts();
+  const food = new BS.FoodManager();
+  const head = { x: 10, y: 10 };
+
+  // Leading apple at (10, 9), trailing apple at (10, 8)
+  const aLead = { type: 'apple', gx: 10, gy: 9, age: 0, hop: 0, pullAcc: 0 };
+  const aTrail = { type: 'apple', gx: 10, gy: 8, age: 0, hop: 0, pullAcc: 0.99 };
+  food.items = [aLead, aTrail];
+  food._rebuildOcc();
+
+  // canLand callback where head (10, 10) is blocked so aLead cannot advance
+  const canLandBlocked = (x, y) => !(x === 10 && y === 10);
+
+  food.magnetDrift(16, head, canLandBlocked, false, 6);
+
+  // Leading apple cannot move into (10, 10)
+  assertEqual(aLead.gy, 9, 'Leading apple stays at gy=9');
+  // Trailing apple wants to move into (10, 9), which is occupied by aLead
+  assertEqual(aTrail.gy, 8, 'Trailing apple cannot pass leading apple');
+  assert(aTrail.pullAcc >= 0.9, 'Trailing apple preserves primed pull progress rather than wiping to 0');
+});
+
+suite.test('T7.61: Picking up Magnet Spore in doStep immediately pulls food on that step and startRun resets _magnetMs', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('classic');
+  game.state = 'playing';
+  const h = game.snake.head;
+  const destX = h.x + game.snake.dir.x;
+  const destY = h.y + game.snake.dir.y;
+
+  // Place Magnet Spore on next step cell, and apple 1 tile above next step cell
+  game.powerups.field = [{ type: 'magnet', gx: destX, gy: destY, life: 5000, maxLife: 5000, age: 0 }];
+  game.food.items = [{ type: 'apple', gx: destX, gy: destY - 1, age: 0, hop: 0 }];
+  game.food._rebuildOcc();
+
+  const prevApples = game.run.apples;
+  game.doStep(16);
+
+  assert(game.effects.magnet > 0, 'Magnet effect activated on pickup step');
+  assertEqual(game.run.apples, prevApples + 1, 'Adjacent apple was immediately pulled and consumed on the pickup step');
+
+  // Simulate grown magnet reach and verify natural expiration + startRun both reset _magnetMs
+  game._magnetMs = 5000;
+  assertEqual(game.magnetReach(), 8, 'Reach is 8 when _magnetMs is 5000');
+  game.effects.magnet = 10;
+  game.update(16);
+  assertEqual(game.effects.magnet, 0, 'Magnet expired during update');
+  assertEqual(game._magnetMs, 0, '_magnetMs resets on the exact frame magnet expires');
+  assertEqual(game.magnetReach(), 6, 'Reach resets to 6 on the exact frame magnet expires');
+  game.effects.magnet = 5000;
+  game._magnetMs = 5000;
+  game.startRun('classic');
+  assertEqual(game._magnetMs, 0, '_magnetMs is reset to 0 on startRun');
+  assertEqual(game.magnetReach(), 6, 'Reach is back to 6 on new run');
+});
+
+suite.test('T7.62: Magnet arrival in doStep processes insects and lengthMax before completing campaign level', () => {
+  const { BS } = loadGameScripts();
+  const game = BS.game;
+  game.startRun('level', 0);
+  game.state = 'playing';
+  game.effects.magnet = 5000;
+  const goal = BS.LEVELS[0].goalApples;
+  game.run.apples = goal - 1;
+  game.snake.grow(1);
+
+  const h = game.snake.head;
+  const destX = h.x + game.snake.dir.x;
+  const destY = h.y + game.snake.dir.y;
+
+  // Goal apple 1 tile from destination (will be pulled by magnetPull), insect on destination cell
+  game.food.items = [{ type: 'apple', gx: destX, gy: destY - 1, age: 0, hop: 0 }];
+  game.food.insects = [{ kind: 'beetle', fx: destX, fy: destY, tx: destX, ty: destY, prog: 1, age: 0, wing: 0 }];
+  game.food._rebuildOcc();
+
+  let popups = [];
+  game.particles.popup = (x, y, text, color, size) => {
+    popups.push({ x, y, text, color, size });
+  };
+
+  game.doStep(16);
+
+  assertEqual(game.state, 'complete', 'Level completed on goal apple');
+  assertEqual(game.run.insects, 1, 'Insect on step destination was also consumed before level completion');
+  assertEqual(game.run.lengthMax, game.snake.length, 'lengthMax was updated for the final step');
+  assertEqual(popups.length, 1, 'Apple and insect eats were batched into a single popup');
+});
+
+suite.test('T7.63: Audio unlock fails soft when the AudioContext constructor throws', () => {
+  const { BS, win } = loadGameScripts();
+  win.AudioContext = function () { throw new Error('NotAllowedError'); };
+  win.webkitAudioContext = win.AudioContext;
+  const sound = new BS.SoundManager();
+
+  sound.unlock();
+  assertEqual(sound.ctx, null, 'No half-built context is kept');
+  // Every later call stays silent instead of throwing.
+  sound.setVolumes({ music: 0.5, sfx: 0.5, muted: false });
+  sound.bite(0);
+  sound.powerup(0);
+  sound.magnetTick();
+  sound.death();
+  sound.startMusic(BS.BIOMES.rainforest.music);
+  sound.stopMusic();
+  sound.setSuspended(true);
+  sound.unlock();
+  assertEqual(sound.ctx, null, 'A retry that fails again also stays silent');
 });
 
 module.exports = suite;

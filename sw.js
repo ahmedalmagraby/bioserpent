@@ -1,5 +1,5 @@
 // BioSerpent service worker — offline-first cache for PWA install.
-const CACHE = 'bioserpent-v42';
+const CACHE = 'bioserpent-v43';
 const ASSETS = [
   './',
   './index.html',
@@ -54,6 +54,14 @@ function pageFirst(e) {
   }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')));
 }
 
+// The precache stores bare paths while the page asks for ?v=N, so offline
+// on a first install the exact match misses; fall back to the bare copy,
+// which this cache version installed fresh.
+function offlineAsset(req) {
+  return caches.match(req, { ignoreSearch: true })
+    .then(hit => hit || new Response('', { status: 504, statusText: 'Gateway Timeout' }));
+}
+
 // Assets: cache-first, refresh in background (stale-while-revalidate).
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
@@ -69,7 +77,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, copy));
         }
         return res;
-      }).catch(() => hit || new Response('', { status: 504, statusText: 'Gateway Timeout' }));
+      }).catch(() => hit || offlineAsset(e.request));
       return hit || fetching;
     })
   );

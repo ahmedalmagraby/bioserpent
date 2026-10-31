@@ -541,6 +541,17 @@ class Snake {
         ctx.beginPath();
         ctx.arc(hx, hy, magnetR2, magnetPhase + Math.PI, magnetPhase + Math.PI * 1.75);
         ctx.stroke();
+
+        // Inward magnetic flux pulses contracting toward the jaws
+        const inwardPhase = (time * 0.0018) % 1;
+        const inwardR = cell * (1.75 - 0.75 * inwardPhase);
+        ctx.globalAlpha = magnetAlpha * 0.35 * inwardPhase;
+        ctx.beginPath();
+        ctx.arc(hx, hy, inwardR, magnetPhase * 1.4, magnetPhase * 1.4 + Math.PI * 0.65);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(hx, hy, inwardR, magnetPhase * 1.4 + Math.PI, magnetPhase * 1.4 + Math.PI * 1.65);
+        ctx.stroke();
         ctx.restore();
       }
       if (state.shield) {
